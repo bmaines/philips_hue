@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Philips Hue Motion Sensor Detector & Light Control
+Philips Hue Motion Sensor, Light & Switch Detector
 --------------------------------------------------
-Detects motion sensors and lights on your Philips Hue Bridge,
-reporting real-time motion status, light states, battery levels, temperature, and light levels.
+Detects motion sensors, switches, and lights on your Philips Hue Bridge,
+reporting real-time motion status, button presses, light states, battery levels, temperature, and lux.
 """
 
 import os
@@ -137,7 +137,6 @@ def set_light_state(bridge_ip, username, light_id, on_state, brightness=None):
     url = f"http://{bridge_ip}/api/{username}/lights/{light_id}/state"
     payload = {"on": bool(on_state)}
     if brightness is not None:
-        # Scale 0-100% to 1-254
         bri_val = max(1, min(254, int((brightness / 100.0) * 254)))
         payload["bri"] = bri_val
 
@@ -150,6 +149,71 @@ def set_light_state(bridge_ip, username, light_id, on_state, brightness=None):
     except Exception as e:
         print(f"❌ Error setting light state: {e}")
         return None
+
+
+def format_button_event(event_code):
+    """Map Hue button event code to human-readable description."""
+    if event_code is None:
+        return "No button presses yet"
+
+    code = int(event_code)
+
+    # Standard 4-button dimmer switch codes:
+    # 1000..1003 = On/Top, 2000..2003 = Dim Up, 3000..3003 = Dim Down, 4000..4003 = Off/Bottom
+    button_names = {
+        1: "On Button",
+        2: "Dim Up Button",
+        3: "Dim Down Button",
+        4: "Off Button"
+    }
+
+    action_names = {
+        0: "Pressed",
+        1: "Held",
+        2: "Released (Short Press)",
+        3: "Released (Long Press)"
+    }
+
+    button_id = code // 1000
+    action_id = code % 1000
+
+    b_name = button_names.get(button_id, f"Button {button_id}")
+    a_name = action_names.get(action_id, f"Action {action_id}")
+
+    return f"{b_name} - {a_name}"
+
+
+def parse_switches(sensors_data):
+    """Filter and parse Hue switch / dimmer button sensors."""
+    if not sensors_data or not isinstance(sensors_data, dict):
+        return []
+
+    switches = []
+    for sid, sdata in sensors_data.items():
+        stype = sdata.get("type", "")
+        if stype in ("ZLLSwitch", "ZTPSwitch", "CLIPSwitch"):
+            state = sdata.get("state", {})
+            config = sdata.get("config", {})
+
+            buttonevent = state.get("buttonevent")
+            last_updated = state.get("lastupdated", "none")
+            battery = config.get("battery", "N/A")
+            reachable = config.get("reachable", True)
+
+            switches.append({
+                "id": sid,
+                "name": sdata.get("name", f"Switch {sid}"),
+                "type": stype,
+                "model": sdata.get("modelid", "Unknown"),
+                "productname": sdata.get("productname", "Hue Switch"),
+                "buttonevent": buttonevent,
+                "button_desc": format_button_event(buttonevent),
+                "last_updated": last_updated,
+                "battery": battery,
+                "reachable": reachable
+            })
+
+    return switches
 
 
 def parse_motion_sensors(sensors_data):
@@ -259,6 +323,28 @@ def format_time_ago(utc_iso_str):
         return utc_iso_str
 
 
+def print_switches_status(switches):
+    """Pretty print status of Hue switches."""
+    print("\n" + "=" * 65)
+    print("🔘 PHILIPS HUE SWITCH & BUTTON STATUS")
+    print("=" * 65)
+
+    if not switches:
+        print("⚠️ No Switches (ZLLSwitch / ZTPSwitch) found on this Hue Bridge.")
+        print("=" * 65 + "\n")
+        return
+
+    for sw in switches:
+        last_seen = format_time_ago(sw["last_updated"])
+        print(f"\n🔘 Switch: \033[1m{sw['name']}\033[0m (ID: {sw['id']} | Model: {sw['model']})")
+        print(f"   Last Action:   \033[1;36m{sw['button_desc']}\033[0m (Code: {sw['buttonevent']})")
+        print(f"   Pressed At:    {sw['last_updated']} UTC ({last_seen})")
+        print(f"   Battery:       {sw['battery']}%" if isinstance(sw['battery'], int) else f"   Battery:       {sw['battery']}")
+        print(f"   Reachable:     {'Yes' if sw['reachable'] else '❌ Offline'}")
+
+    print("\n" + "=" * 65 + "\n")
+
+
 def print_sensor_status(sensors):
     """Pretty print status of motion sensors."""
     print("\n" + "=" * 65)
@@ -314,23 +400,26 @@ def print_lights_status(lights):
 
 
 def live_monitor(bridge_ip, username, interval=1.0):
-    """Continuously monitor motion sensors and log events live."""
-    print(f"\n📡 Starting Live Motion Monitor (Polling every {interval}s). Press Ctrl+C to stop.\n")
-    print(f"{'TIME':<12} | {'SENSOR NAME':<22} | {'MOTION STATE':<18} | {'LAST DETECTED'}")
-    print("-" * 75)
+    """Continuously monitor motion sensors & switch button presses live."""
+    print(f"\n📡 Starting Live Monitor for Motion & Switches (Polling every {interval}s). Press Ctrl+C to stop.\n")
+    print(f"{'TIME':<12} | {'DEVICE NAME':<22} | {'EVENT / STATE':<28} | {'LAST UPDATED'}")
+    print("-" * 80)
 
-    last_states = {}
+    last_motion_states = {}
+    last_switch_events = {}
 
     try:
         while True:
             sensors_data = get_sensors_v1(bridge_ip, username)
             sensors = parse_motion_sensors(sensors_data)
+            switches = parse_switches(sensors_data)
 
             now_str = datetime.now().strftime("%H:%M:%S")
 
+            # Check motion sensors
             for s in sensors:
                 sid = s["id"]
-                prev_presence = last_states.get(sid)
+                prev_presence = last_motion_states.get(sid)
                 curr_presence = s["presence"]
                 last_seen = format_time_ago(s["last_updated"])
 
@@ -341,8 +430,22 @@ def live_monitor(bridge_ip, username, interval=1.0):
                     else:
                         state_str = "\033[1;32m 🟢 Clear    \033[0m"
 
-                    print(f"{now_str:<12} | {s['name']:<22} | {state_str:<27} | {last_seen}")
-                    last_states[sid] = curr_presence
+                    print(f"{now_str:<12} | {s['name']:<22} | {state_str:<37} | {last_seen}")
+                    last_motion_states[sid] = curr_presence
+
+            # Check switches
+            for sw in switches:
+                sw_id = sw["id"]
+                prev_time = last_switch_events.get(sw_id)
+                curr_time = sw["last_updated"]
+
+                if prev_time is not None and curr_time != prev_time and curr_time != "none":
+                    btn_desc = sw["button_desc"]
+                    event_str = f"\033[1;43;30m 🔘 {btn_desc} \033[0m"
+                    sys.stdout.write("\a")
+                    print(f"{now_str:<12} | {sw['name']:<22} | {event_str:<37} | {format_time_ago(curr_time)}")
+                
+                last_switch_events[sw_id] = curr_time
 
             time.sleep(interval)
     except KeyboardInterrupt:
@@ -350,10 +453,10 @@ def live_monitor(bridge_ip, username, interval=1.0):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Philips Hue Motion Sensor & Light Control")
+    parser = argparse.ArgumentParser(description="Philips Hue Motion Sensor, Switch & Light Control")
     parser.add_argument("--ip", help="Philips Hue Bridge IP address")
     parser.add_argument("--key", help="Philips Hue API Username/Key")
-    parser.add_argument("--monitor", "-m", action="store_true", help="Run live motion monitoring loop")
+    parser.add_argument("--monitor", "-m", action="store_true", help="Run live motion & switch monitoring loop")
     parser.add_argument("--interval", type=float, default=1.0, help="Polling interval in seconds (default: 1.0)")
     parser.add_argument("--json", action="store_true", help="Output raw JSON data")
     parser.add_argument("--pair", action="store_true", help="Force re-pairing with Hue Bridge")
@@ -376,7 +479,6 @@ def main():
     config["api_key"] = api_key
     save_config(config)
 
-    # Toggle light command
     if args.toggle_light:
         lights_data = get_lights_v1(bridge_ip, api_key)
         parsed_lights = parse_lights(lights_data)
@@ -406,16 +508,18 @@ def main():
         sys.exit(1)
 
     motion_sensors = parse_motion_sensors(sensors_data)
+    switches = parse_switches(sensors_data)
     lights = parse_lights(lights_data)
 
     if args.json:
-        print(json.dumps({"sensors": motion_sensors, "lights": lights}, indent=2))
+        print(json.dumps({"sensors": motion_sensors, "switches": switches, "lights": lights}, indent=2))
         return
 
     if args.monitor:
         live_monitor(bridge_ip, api_key, interval=args.interval)
     else:
         print_sensor_status(motion_sensors)
+        print_switches_status(switches)
         print_lights_status(lights)
 
 

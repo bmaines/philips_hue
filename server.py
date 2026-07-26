@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Philips Hue Motion Sensor & Light Control Web Dashboard Server
-----------------------------------------------------------------
-Provides a local web dashboard to monitor Hue motion sensors and control lights in real time.
+Philips Hue Motion Sensor, Switch & Light Dashboard Server
+------------------------------------------------------------
+Provides a local web dashboard to monitor Hue motion sensors, switches/buttons, and control lights in real time.
 """
 
 import os
@@ -15,7 +15,7 @@ import urllib.error
 from hue_motion import (
     discover_bridge_ip, load_config, save_config,
     get_sensors_v1, get_lights_v1, parse_motion_sensors,
-    parse_lights, set_light_state, pair_bridge, CONFIG_FILE
+    parse_switches, parse_lights, set_light_state, pair_bridge, CONFIG_FILE
 )
 
 PORT = 8080
@@ -62,7 +62,6 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
             except Exception as e:
                 self.send_json_response({"success": False, "error": str(e)})
         elif self.path.startswith("/api/lights/"):
-            # Path format: /api/lights/<id>/state
             parts = self.path.strip("/").split("/")
             if len(parts) >= 4 and parts[2] != "" and parts[3] == "state":
                 light_id = parts[2]
@@ -102,6 +101,7 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                 "bridge_ip": bridge_ip,
                 "error": "Bridge not paired yet. Click Pair or enter API Key.",
                 "sensors": [],
+                "switches": [],
                 "lights": []
             }
 
@@ -114,16 +114,19 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                 "bridge_ip": bridge_ip,
                 "error": "Could not connect to bridge or API key invalid.",
                 "sensors": [],
+                "switches": [],
                 "lights": []
             }
 
         sensors = parse_motion_sensors(sensors_data)
+        switches = parse_switches(sensors_data)
         lights = parse_lights(lights_data)
 
         return {
             "paired": True,
             "bridge_ip": bridge_ip,
             "sensors": sensors,
+            "switches": switches,
             "lights": lights,
             "server_time": os.popen("date").read().strip()
         }
@@ -132,7 +135,7 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
 def run_server(port=PORT):
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", port), HueDashboardHandler) as httpd:
-        print(f"\n🌐 Hue Motion & Lights Web Dashboard running at: http://localhost:{port}")
+        print(f"\n🌐 Hue Motion, Switch & Lights Web Dashboard running at: http://localhost:{port}")
         print("Press Ctrl+C to stop the server.\n")
         try:
             httpd.serve_forever()

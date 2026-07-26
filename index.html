@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Philips Hue Motion & Lights Monitor</title>
+  <title>Philips Hue Motion, Switch & Lights Monitor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -16,10 +16,12 @@
       --accent-green: #34c759;
       --accent-yellow: #ffcc00;
       --accent-blue: #0a84ff;
+      --accent-cyan: #64d2ff;
       --text-main: #f2f4f8;
       --text-sub: #8e9bb0;
       --glow-red: rgba(255, 59, 48, 0.35);
       --glow-yellow: rgba(255, 204, 0, 0.3);
+      --glow-cyan: rgba(100, 210, 255, 0.35);
     }
 
     * {
@@ -36,7 +38,7 @@
       padding: 2rem 1rem;
       background-image: 
         radial-gradient(at 10% 10%, rgba(10, 132, 255, 0.08) 0px, transparent 50%),
-        radial-gradient(at 90% 90%, rgba(255, 204, 0, 0.05) 0px, transparent 50%);
+        radial-gradient(at 90% 90%, rgba(100, 210, 255, 0.05) 0px, transparent 50%);
     }
 
     .container {
@@ -63,7 +65,7 @@
       width: 42px;
       height: 42px;
       border-radius: 12px;
-      background: linear-gradient(135deg, #0a84ff, #ffcc00);
+      background: linear-gradient(135deg, #0a84ff, #64d2ff);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -168,6 +170,11 @@
       box-shadow: 0 0 25px var(--glow-yellow);
     }
 
+    .card.switch-pressed {
+      border-color: rgba(100, 210, 255, 0.6);
+      box-shadow: 0 0 30px var(--glow-cyan);
+    }
+
     .card-header {
       display: flex;
       justify-content: space-between;
@@ -221,6 +228,12 @@
       background: rgba(255, 255, 255, 0.05);
       color: var(--text-sub);
       border: 1px solid var(--card-border);
+    }
+
+    .status-indicator.switch-badge {
+      background: rgba(100, 210, 255, 0.15);
+      color: #64d2ff;
+      border: 1px solid rgba(100, 210, 255, 0.3);
     }
 
     @keyframes alert-pulse {
@@ -363,9 +376,9 @@
 <div class="container">
   <header>
     <div class="logo-area">
-      <div class="logo-icon">💡</div>
+      <div class="logo-icon">🎛️</div>
       <div>
-        <h1>Hue Motion & Lights Monitor</h1>
+        <h1>Hue Motion, Switch & Lights</h1>
         <div class="subtitle" id="bridge-info">Connected to Philips Hue Bridge</div>
       </div>
     </div>
@@ -389,19 +402,19 @@
   </div>
 
   <div class="section-title">🏃 Motion Sensors</div>
-  <div class="grid" id="sensor-grid">
-    <!-- Motion Sensor cards -->
-  </div>
+  <div class="grid" id="sensor-grid"></div>
+
+  <div class="section-title">🔘 Dimmer Switches & Buttons</div>
+  <div class="grid" id="switches-grid"></div>
 
   <div class="section-title">💡 Hue Lights</div>
-  <div class="grid" id="lights-grid">
-    <!-- Light cards -->
-  </div>
+  <div class="grid" id="lights-grid"></div>
 </div>
 
 <script>
   let soundEnabled = true;
   let prevMotionMap = {};
+  let prevSwitchMap = {};
 
   function toggleSound() {
     soundEnabled = !soundEnabled;
@@ -409,21 +422,21 @@
     document.getElementById('sound-label').textContent = soundEnabled ? 'Sound On' : 'Muted';
   }
 
-  function playAlertSound() {
+  function playAlertSound(freq = 880) {
     if (!soundEnabled) return;
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.2);
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freq / 2, ctx.currentTime + 0.25);
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start();
-      osc.stop(ctx.currentTime + 0.2);
+      osc.stop(ctx.currentTime + 0.25);
     } catch(e) {}
   }
 
@@ -463,6 +476,7 @@
       bridgeInfo.textContent = `Bridge IP: ${data.bridge_ip}`;
 
       renderSensors(data.sensors || []);
+      renderSwitches(data.switches || []);
       renderLights(data.lights || []);
     } catch(e) {
       console.error('Error fetching status:', e);
@@ -478,6 +492,7 @@
         <p style="color: var(--text-sub); margin-top: 0.5rem;">${msg}</p>
       </div>
     `;
+    document.getElementById('switches-grid').innerHTML = '';
     document.getElementById('lights-grid').innerHTML = '';
   }
 
@@ -499,7 +514,7 @@
       const prevIsMotion = prevMotionMap[s.id];
 
       if (isMotion && !prevIsMotion) {
-        playAlertSound();
+        playAlertSound(880);
       }
       prevMotionMap[s.id] = isMotion;
 
@@ -541,6 +556,66 @@
               <span class="metric-label">Ambient Light</span>
               <span class="metric-val">${s.lux} lux</span>
             </div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderSwitches(switches) {
+    const grid = document.getElementById('switches-grid');
+
+    if (switches.length === 0) {
+      grid.innerHTML = `
+        <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 2rem;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔘</div>
+          <h3>No Switches Found</h3>
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = switches.map(sw => {
+      const prevTime = prevSwitchMap[sw.id];
+      const currTime = sw.last_updated;
+      const isNewPress = prevTime !== undefined && prevTime !== currTime && currTime !== 'none';
+
+      if (isNewPress) {
+        playAlertSound(1200);
+      }
+      prevSwitchMap[sw.id] = currTime;
+
+      const battery = typeof sw.battery === 'number' ? sw.battery : 100;
+      const batteryColor = battery < 20 ? 'var(--accent-red)' : battery < 50 ? '#ff9f0a' : 'var(--accent-green)';
+
+      return `
+        <div class="card ${isNewPress ? 'switch-pressed' : ''}">
+          <div class="card-header">
+            <div>
+              <div class="sensor-title">${sw.name}</div>
+              <div class="sensor-model">${sw.productname || sw.type} • ID ${sw.id}</div>
+            </div>
+            <div class="status-indicator switch-badge">
+              <span>🔘 SWITCH</span>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <div class="metric-item" style="grid-column: 1 / -1;">
+              <span class="metric-label">Last Button Pressed</span>
+              <span class="metric-val" style="color: var(--accent-cyan); font-size: 1rem;">${sw.button_desc}</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Pressed</span>
+              <span class="metric-val">${formatTimeAgo(sw.last_updated)}</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Battery</span>
+              <span class="metric-val" style="color: ${batteryColor}">${sw.battery}%</span>
+              <div class="battery-bar">
+                <div class="battery-fill" style="width: ${battery}%; background: ${batteryColor};"></div>
+              </div>
+            </div>
           </div>
         </div>
       `;
