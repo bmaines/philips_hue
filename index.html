@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Philips Hue Motion & Lights Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: rgba(22, 28, 45, 0.7);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent-red: #ff3b30;
+      --accent-green: #34c759;
+      --accent-yellow: #ffcc00;
+      --accent-blue: #0a84ff;
+      --text-main: #f2f4f8;
+      --text-sub: #8e9bb0;
+      --glow-red: rgba(255, 59, 48, 0.35);
+      --glow-yellow: rgba(255, 204, 0, 0.3);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+      background-image: 
+        radial-gradient(at 10% 10%, rgba(10, 132, 255, 0.08) 0px, transparent 50%),
+        radial-gradient(at 90% 90%, rgba(255, 204, 0, 0.05) 0px, transparent 50%);
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #0a84ff, #ffcc00);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      box-shadow: 0 4px 14px rgba(10, 132, 255, 0.3);
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .pulse-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 0.4rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      border: 1px solid var(--card-border);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.4; }
+      50% { opacity: 1; }
+      100% { opacity: 0.4; }
+    }
+
+    .sound-toggle {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.4rem 0.8rem;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s;
+    }
+
+    .sound-toggle:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .section-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin: 2rem 0 1rem 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 1.5rem;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card.motion-active {
+      border-color: rgba(255, 59, 48, 0.6);
+      box-shadow: 0 0 30px var(--glow-red);
+    }
+
+    .card.light-on {
+      border-color: rgba(255, 204, 0, 0.4);
+      box-shadow: 0 0 25px var(--glow-yellow);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1.25rem;
+    }
+
+    .sensor-title {
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+
+    .sensor-model {
+      font-size: 0.75rem;
+      color: var(--text-sub);
+      margin-top: 0.2rem;
+    }
+
+    .status-indicator {
+      padding: 0.5rem 1rem;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 0.85rem;
+      letter-spacing: 0.03em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-transform: uppercase;
+    }
+
+    .status-indicator.motion-active {
+      background: rgba(255, 59, 48, 0.2);
+      color: #ff453a;
+      border: 1px solid rgba(255, 59, 48, 0.4);
+      animation: alert-pulse 1s infinite alternate;
+    }
+
+    .status-indicator.clear {
+      background: rgba(52, 199, 89, 0.15);
+      color: #30d158;
+      border: 1px solid rgba(52, 199, 89, 0.3);
+    }
+
+    .status-indicator.light-on {
+      background: rgba(255, 204, 0, 0.2);
+      color: #ffd60a;
+      border: 1px solid rgba(255, 204, 0, 0.4);
+    }
+
+    .status-indicator.light-off {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-sub);
+      border: 1px solid var(--card-border);
+    }
+
+    @keyframes alert-pulse {
+      0% { transform: scale(1); box-shadow: 0 0 5px var(--glow-red); }
+      100% { transform: scale(1.03); box-shadow: 0 0 20px var(--glow-red); }
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .metric-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      color: var(--text-sub);
+      margin-bottom: 0.25rem;
+    }
+
+    .metric-val {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .battery-bar {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      margin-top: 0.3rem;
+      overflow: hidden;
+    }
+
+    .battery-fill {
+      height: 100%;
+      background: var(--accent-green);
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+
+    .light-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .toggle-btn {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+      padding: 0.5rem 1rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .toggle-btn.is-on {
+      background: var(--accent-yellow);
+      color: #1c1c1e;
+      border-color: var(--accent-yellow);
+      box-shadow: 0 0 12px rgba(255, 204, 0, 0.4);
+    }
+
+    .toggle-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    .slider-container {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 50%;
+    }
+
+    .slider {
+      width: 100%;
+      accent-color: var(--accent-yellow);
+      cursor: pointer;
+    }
+
+    .banner {
+      background: rgba(255, 159, 10, 0.15);
+      border: 1px solid rgba(255, 159, 10, 0.3);
+      border-radius: 16px;
+      padding: 1.25rem;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .banner-text h3 {
+      font-size: 1rem;
+      margin-bottom: 0.25rem;
+      color: #ff9f0a;
+    }
+
+    .banner-text p {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+    }
+
+    .btn {
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo-area">
+      <div class="logo-icon">💡</div>
+      <div>
+        <h1>Hue Motion & Lights Monitor</h1>
+        <div class="subtitle" id="bridge-info">Connected to Philips Hue Bridge</div>
+      </div>
+    </div>
+    <div class="status-bar">
+      <button class="sound-toggle" id="sound-btn" onclick="toggleSound()">
+        <span id="sound-icon">🔊</span> <span id="sound-label">Sound On</span>
+      </button>
+      <div class="pulse-badge">
+        <div class="dot"></div>
+        <span id="live-label">LIVE</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="pair-banner" class="banner hidden">
+    <div class="banner-text">
+      <h3>Bridge Link Required</h3>
+      <p>Press the round Link Button on your Philips Hue Bridge, then click Pair below.</p>
+    </div>
+    <button class="btn" onclick="triggerPair()">Pair Now</button>
+  </div>
+
+  <div class="section-title">🏃 Motion Sensors</div>
+  <div class="grid" id="sensor-grid">
+    <!-- Motion Sensor cards -->
+  </div>
+
+  <div class="section-title">💡 Hue Lights</div>
+  <div class="grid" id="lights-grid">
+    <!-- Light cards -->
+  </div>
+</div>
+
+<script>
+  let soundEnabled = true;
+  let prevMotionMap = {};
+
+  function toggleSound() {
+    soundEnabled = !soundEnabled;
+    document.getElementById('sound-icon').textContent = soundEnabled ? '🔊' : '🔇';
+    document.getElementById('sound-label').textContent = soundEnabled ? 'Sound On' : 'Muted';
+  }
+
+  function playAlertSound() {
+    if (!soundEnabled) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
+    } catch(e) {}
+  }
+
+  function formatTimeAgo(utcStr) {
+    if (!utcStr || utcStr === 'none') return 'Unknown';
+    try {
+      const parts = utcStr.split('T');
+      const dateParts = parts[0].split('-');
+      const timeParts = parts[1].split(':');
+      const utcDate = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2], timeParts[0], timeParts[1], timeParts[2]));
+      const diffSec = Math.max(0, Math.floor((new Date() - utcDate) / 1000));
+      
+      if (diffSec < 60) return `${diffSec}s ago`;
+      if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ${diffSec % 60}s ago`;
+      return `${Math.floor(diffSec / 3600)}h ${Math.floor((diffSec % 3600) / 60)}m ago`;
+    } catch(e) {
+      return utcStr;
+    }
+  }
+
+  async function fetchStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const data = await res.json();
+
+      const banner = document.getElementById('pair-banner');
+      const bridgeInfo = document.getElementById('bridge-info');
+
+      if (!data.paired) {
+        banner.classList.remove('hidden');
+        bridgeInfo.textContent = `Bridge IP: ${data.bridge_ip || 'Unknown'} (Not Paired)`;
+        renderEmptyState(data.error);
+        return;
+      }
+
+      banner.classList.add('hidden');
+      bridgeInfo.textContent = `Bridge IP: ${data.bridge_ip}`;
+
+      renderSensors(data.sensors || []);
+      renderLights(data.lights || []);
+    } catch(e) {
+      console.error('Error fetching status:', e);
+    }
+  }
+
+  function renderEmptyState(msg) {
+    const grid = document.getElementById('sensor-grid');
+    grid.innerHTML = `
+      <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 3rem;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">🔌</div>
+        <h3>Bridge Connection Required</h3>
+        <p style="color: var(--text-sub); margin-top: 0.5rem;">${msg}</p>
+      </div>
+    `;
+    document.getElementById('lights-grid').innerHTML = '';
+  }
+
+  function renderSensors(sensors) {
+    const grid = document.getElementById('sensor-grid');
+
+    if (sensors.length === 0) {
+      grid.innerHTML = `
+        <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 2rem;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔍</div>
+          <h3>No Motion Sensors Found</h3>
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = sensors.map(s => {
+      const isMotion = s.presence;
+      const prevIsMotion = prevMotionMap[s.id];
+
+      if (isMotion && !prevIsMotion) {
+        playAlertSound();
+      }
+      prevMotionMap[s.id] = isMotion;
+
+      const battery = typeof s.battery === 'number' ? s.battery : 100;
+      const batteryColor = battery < 20 ? 'var(--accent-red)' : battery < 50 ? '#ff9f0a' : 'var(--accent-green)';
+      const tempF = s.temperature_c ? ((s.temperature_c * 9/5) + 32).toFixed(1) : null;
+
+      return `
+        <div class="card ${isMotion ? 'motion-active' : ''}">
+          <div class="card-header">
+            <div>
+              <div class="sensor-title">${s.name}</div>
+              <div class="sensor-model">${s.productname || 'Hue Motion Sensor'} • ID ${s.id}</div>
+            </div>
+            <div class="status-indicator ${isMotion ? 'motion-active' : 'clear'}">
+              <span>${isMotion ? '🚨 MOTION' : '🟢 CLEAR'}</span>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <div class="metric-item">
+              <span class="metric-label">Last Motion</span>
+              <span class="metric-val">${formatTimeAgo(s.last_updated)}</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Battery</span>
+              <span class="metric-val" style="color: ${batteryColor}">${s.battery}%</span>
+              <div class="battery-bar">
+                <div class="battery-fill" style="width: ${battery}%; background: ${batteryColor};"></div>
+              </div>
+            </div>
+            ${s.temperature_c ? `
+            <div class="metric-item">
+              <span class="metric-label">Temperature</span>
+              <span class="metric-val">${s.temperature_c.toFixed(1)}°C <span style="font-size: 0.8rem; color: var(--text-sub);">(${tempF}°F)</span></span>
+            </div>` : ''}
+            ${s.lux ? `
+            <div class="metric-item">
+              <span class="metric-label">Ambient Light</span>
+              <span class="metric-val">${s.lux} lux</span>
+            </div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderLights(lights) {
+    const grid = document.getElementById('lights-grid');
+
+    if (lights.length === 0) {
+      grid.innerHTML = `
+        <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 2rem;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">💡</div>
+          <h3>No Lights Found</h3>
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = lights.map(l => {
+      const isOn = l.on;
+
+      return `
+        <div class="card ${isOn ? 'light-on' : ''}">
+          <div class="card-header">
+            <div>
+              <div class="sensor-title">${l.name}</div>
+              <div class="sensor-model">${l.productname || l.type} • ID ${l.id}</div>
+            </div>
+            <div class="status-indicator ${isOn ? 'light-on' : 'light-off'}">
+              <span>${isOn ? '💡 ON' : '🌑 OFF'}</span>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <div class="metric-item">
+              <span class="metric-label">Brightness</span>
+              <span class="metric-val">${isOn ? l.brightness + '%' : 'Off'}</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Status</span>
+              <span class="metric-val">${l.reachable ? 'Online' : '❌ Offline'}</span>
+            </div>
+          </div>
+
+          <div class="light-controls">
+            <button class="toggle-btn ${isOn ? 'is-on' : ''}" onclick="toggleLight('${l.id}', ${!isOn})">
+              ${isOn ? 'Turn Off' : 'Turn On'}
+            </button>
+            <div class="slider-container">
+              <input type="range" min="1" max="100" value="${l.brightness}" class="slider" 
+                     onchange="setBrightness('${l.id}', this.value)" ${!isOn ? 'disabled' : ''}>
+              <span style="font-size: 0.8rem; color: var(--text-sub);">${l.brightness}%</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function toggleLight(lightId, onState) {
+    try {
+      await fetch(`/api/lights/${lightId}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on: onState })
+      });
+      fetchStatus();
+    } catch(e) {
+      console.error('Error toggling light:', e);
+    }
+  }
+
+  async function setBrightness(lightId, brightness) {
+    try {
+      await fetch(`/api/lights/${lightId}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on: true, brightness: parseInt(brightness) })
+      });
+      fetchStatus();
+    } catch(e) {
+      console.error('Error setting brightness:', e);
+    }
+  }
+
+  async function triggerPair() {
+    alert('Please press the physical link button on top of your Philips Hue Bridge now, then click OK.');
+    try {
+      const res = await fetch('/api/pair', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        alert('🎉 Successfully paired with Hue Bridge!');
+        fetchStatus();
+      } else {
+        alert('⚠️ ' + (data.error || 'Pairing failed. Try pressing the link button again.'));
+      }
+    } catch(e) {
+      alert('Error triggering pairing: ' + e);
+    }
+  }
+
+  fetchStatus();
+  setInterval(fetchStatus, 1000);
+</script>
+</body>
+</html>

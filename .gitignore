@@ -1,0 +1,15 @@
+# Local Hue Credentials & Configuration
+.hue_config.json
+
+# Python cache & bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Backup archives
+Philips_Hue_Backup.zip
+
+# OS / Editor files
+.DS_Store
+.vscode/
+.idea/
