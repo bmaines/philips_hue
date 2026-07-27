@@ -789,6 +789,10 @@
     </div>
   </div>
 
+  <!-- Entertainment Zones Section -->
+  <div class="section-title">🎭 Hue Entertainment Zones</div>
+  <div class="grid" id="entertainment-grid"></div>
+
   <div class="section-title">🏃 Motion Sensors</div>
   <div class="grid" id="sensor-grid"></div>
 
@@ -869,11 +873,77 @@
 
       updateChaserOrderList(cachedLights);
       renderFlowLightSelector(cachedLights);
+      renderEntertainment(data.entertainment || []);
       renderSensors(data.sensors || []);
       renderSwitches(data.switches || []);
       renderLights(cachedLights);
     } catch(e) {
       console.error('Error fetching status:', e);
+    }
+  }
+
+  function renderEntertainment(configs) {
+    const grid = document.getElementById('entertainment-grid');
+
+    if (!configs || configs.length === 0) {
+      grid.innerHTML = `
+        <div class="card ent-panel" style="grid-column: 1 / -1; text-align: center; padding: 2rem; background: rgba(255,149,0,0.08); border: 1px solid rgba(255,149,0,0.25); border-radius: 20px;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🎭</div>
+          <h3>No Entertainment Zones Found</h3>
+          <p style="color: var(--text-sub); margin-top: 0.5rem;">Create an Entertainment Area in the official Hue app to enable music and gaming streaming sync.</p>
+        </div>
+      `;
+      return;
+    }
+
+    grid.innerHTML = configs.map(c => {
+      const isActive = c.active || c.status === 'active';
+      return `
+        <div class="card flow-panel" style="background: linear-gradient(135deg, rgba(255, 149, 0, 0.12), rgba(175, 82, 222, 0.08)); border-color: rgba(255, 149, 0, 0.35);">
+          <div class="card-header">
+            <div>
+              <div class="sensor-title">🎭 ${c.name}</div>
+              <div class="sensor-model">Type: ${c.type} • Zone ID ${c.id}</div>
+            </div>
+            <div class="status-indicator" style="${isActive ? 'background: rgba(52, 199, 89, 0.2); color: #30d158; border: 1px solid rgba(52, 199, 89, 0.4);' : 'background: rgba(255, 255, 255, 0.05); color: var(--text-sub); border: 1px solid var(--card-border);'}">
+              <span>${isActive ? '🟢 STREAMING ACTIVE' : '⚪ INACTIVE'}</span>
+            </div>
+          </div>
+
+          <div class="metrics">
+            <div class="metric-item">
+              <span class="metric-label">Zone Lights</span>
+              <span class="metric-val" style="color: #ff9f0a;">${c.light_count} Lights</span>
+            </div>
+            <div class="metric-item">
+              <span class="metric-label">Channels</span>
+              <span class="metric-val">${c.channel_count} Channels</span>
+            </div>
+          </div>
+
+          <div style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem;">
+            <button class="btn" style="${isActive ? 'background: var(--accent-red);' : 'background: linear-gradient(135deg, #ff9500, #ffcc00); color: #000; font-weight: 700;'}" onclick="toggleEntertainmentSession('${c.id}', '${isActive ? 'stop' : 'start'}')">
+              ${isActive ? '⏹️ Stop Session' : '▶️ Start Streaming Session'}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function toggleEntertainmentSession(groupId, action) {
+    try {
+      const res = await fetch('/api/entertainment/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: groupId, action: action })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchStatus();
+      }
+    } catch(e) {
+      alert('Error toggling entertainment session: ' + e);
     }
   }
 

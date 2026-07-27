@@ -17,6 +17,7 @@ from hue_motion import (
     discover_bridge_ip, load_config, save_config,
     get_sensors_v1, get_lights_v1, parse_motion_sensors,
     parse_switches, parse_lights, set_light_state, pair_bridge,
+    get_entertainment_areas, set_entertainment_stream,
     start_chaser_daemon, stop_chaser_daemon,
     start_color_flow_daemon, stop_color_flow_daemon, CONFIG_FILE
 )
@@ -62,6 +63,22 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                     config["api_key"] = data["key"]
                 save_config(config)
                 self.send_json_response({"success": True})
+            except Exception as e:
+                self.send_json_response({"success": False, "error": str(e)})
+        elif self.path == "/api/entertainment/action":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                data = json.loads(body)
+                group_id = data.get("id")
+                action = data.get("action", "start")
+                config = load_config()
+                bridge_ip = config.get("bridge_ip") or "192.168.68.53"
+                api_key = config.get("api_key")
+
+                is_active = (action == "start")
+                res = set_entertainment_stream(bridge_ip, api_key, group_id, active=is_active)
+                self.send_json_response({"success": True, "action": action, "result": res})
             except Exception as e:
                 self.send_json_response({"success": False, "error": str(e)})
         elif self.path == "/api/color_flow/start":
@@ -165,11 +182,13 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                 "error": "Bridge not paired yet. Click Pair or enter API Key.",
                 "sensors": [],
                 "switches": [],
-                "lights": []
+                "lights": [],
+                "entertainment": []
             }
 
         sensors_data = get_sensors_v1(bridge_ip, api_key)
         lights_data = get_lights_v1(bridge_ip, api_key)
+        entertainment = get_entertainment_areas(bridge_ip, api_key)
 
         if sensors_data is None and lights_data is None:
             return {
@@ -178,7 +197,8 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                 "error": "Could not connect to bridge or API key invalid.",
                 "sensors": [],
                 "switches": [],
-                "lights": []
+                "lights": [],
+                "entertainment": []
             }
 
         sensors = parse_motion_sensors(sensors_data)
@@ -191,6 +211,7 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
             "sensors": sensors,
             "switches": switches,
             "lights": lights,
+            "entertainment": entertainment,
             "server_time": os.popen("date").read().strip()
         }
 

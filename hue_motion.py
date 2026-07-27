@@ -715,6 +715,121 @@ def print_lights_status(lights):
     print("\n" + "=" * 65 + "\n")
 
 
+def get_entertainment_areas(bridge_ip, username):
+    """Fetch all Hue Entertainment areas/groups from the Hue Bridge."""
+    url = f"http://{bridge_ip}/api/{username}/groups"
+    areas = []
+    try:
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req, timeout=4) as res:
+            groups_data = json.loads(res.read().decode())
+            if isinstance(groups_data, dict):
+                for gid, gdata in groups_data.items():
+                    if gdata.get("type") == "Entertainment":
+                        stream = gdata.get("stream", {})
+                        is_active = stream.get("active", False)
+                        lights = gdata.get("lights", [])
+                        areas.append({
+                            "id": gid,
+                            "name": gdata.get("name", f"Entertainment Zone {gid}"),
+                            "active": is_active,
+                            "status": "active" if is_active else "inactive",
+                            "type": gdata.get("class", "Entertainment"),
+                            "light_ids": lights,
+                            "light_count": len(lights),
+                            "channel_count": len(lights),
+                            "owner": stream.get("owner", "None")
+                        })
+                return areas
+    except Exception:
+        pass
+
+    # Fallback to v2 CLIP API if v1 failed or returned empty
+    try:
+        import ssl
+        ctx = ssl._create_unverified_context()
+        req_v2 = urllib.request.Request(
+            f"https://{bridge_ip}/clip/v2/resource/entertainment_configuration",
+            headers={"hue-application-key": username}
+        )
+        with urllib.request.urlopen(req_v2, context=ctx, timeout=4) as res:
+            data = json.loads(res.read().decode())
+            for item in data.get("data", []):
+                eid = item.get("id")
+                name = item.get("metadata", {}).get("name") or item.get("name") or "Entertainment Zone"
+                status = item.get("status", "inactive")
+                is_active = (status == "active")
+                channels = item.get("channels", [])
+                lights = item.get("light_services", [])
+                areas.append({
+                    "id": eid,
+                    "id_v1": item.get("id_v1"),
+                    "name": name,
+                    "active": is_active,
+                    "status": status,
+                    "type": item.get("configuration_type", "Entertainment"),
+                    "light_ids": [l.get("rid") for l in lights],
+                    "light_count": len(lights),
+                    "channel_count": len(channels),
+                    "owner": item.get("stream_proxy", {}).get("node", {}).get("rid", "None")
+                })
+    except Exception:
+        pass
+
+    return areas
+
+
+def set_entertainment_stream(bridge_ip, username, group_id, active=True):
+    """Start or Stop Hue Entertainment streaming session on specified zone/group."""
+    if str(group_id).isdigit():
+        url = f"http://{bridge_ip}/api/{username}/groups/{group_id}"
+        payload = json.dumps({"stream": {"active": bool(active)}}).encode("utf-8")
+        try:
+            req = urllib.request.Request(url, data=payload, method="PUT", headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=3) as res:
+                resp = json.loads(res.read().decode())
+                print(f"🎭 Entertainment Stream (Group {group_id}) -> {'START' if active else 'STOP'}: {resp}")
+                return resp
+        except Exception as e:
+            print(f"⚠️ Failed to update entertainment stream: {e}")
+            return None
+    else:
+        import ssl
+        ctx = ssl._create_unverified_context()
+        url = f"https://{bridge_ip}/clip/v2/resource/entertainment_configuration/{group_id}"
+        payload = json.dumps({"action": "start" if active else "stop"}).encode("utf-8")
+        try:
+            req = urllib.request.Request(url, data=payload, method="PUT", headers={"hue-application-key": username, "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, context=ctx, timeout=3) as res:
+                resp = json.loads(res.read().decode())
+                print(f"🎭 Entertainment Session {group_id} -> {'START' if active else 'STOP'}: {resp}")
+                return resp
+        except Exception as e:
+            print(f"⚠️ Failed to update entertainment session: {e}")
+            return None
+
+
+def print_entertainment_status(areas):
+    """Pretty print Hue Entertainment zones status."""
+    print("\n" + "=" * 65)
+    print("🎭 PHILIPS HUE ENTERTAINMENT ZONES")
+    print("=" * 65)
+
+    if not areas:
+        print("⚠️ No Entertainment Zones found on this Hue Bridge.")
+        print("=" * 65 + "\n")
+        return
+
+    for a in areas:
+        status_str = "\033[1;32m🟢 ACTIVE STREAMING\033[0m" if a["active"] else "\033[1;30m⚪ Inactive\033[0m"
+        print(f"\n🎭 Entertainment Zone: \033[1m{a['name']}\033[0m (ID: {a['id']} | Type: {a['type']})")
+        print(f"   Status:       {status_str}")
+        print(f"   Lights:       {', '.join(str(x) for x in a['light_ids'])} ({a['light_count']} lights)")
+        print(f"   Channels:     {a['channel_count']} channels")
+
+    print("\n" + "=" * 65 + "\n")
+
+
 def live_monitor(bridge_ip, username, interval=1.0):
     """Continuously monitor motion sensors & switch button presses live."""
     print(f"\n📡 Starting Live Monitor for Motion & Switches (Polling every {interval}s). Press Ctrl+C to stop.\n")
@@ -797,6 +912,10 @@ def main():
     parser.add_argument("--flash-bri", type=int, default=100, help="Flash brightness percentage (1-100%%, default: 100)")
     parser.add_argument("--idle-mode", choices=["restore", "off"], default="restore", help="State between flashes: 'restore' (original color) or 'off'")
 
+    # Entertainment CLI args
+    parser.add_argument("--start-stream", help="Entertainment Group/Zone ID to start streaming session")
+    parser.add_argument("--stop-stream", help="Entertainment Group/Zone ID to stop streaming session")
+
     args = parser.parse_args()
 
     config = load_config()
@@ -812,6 +931,14 @@ def main():
     config["bridge_ip"] = bridge_ip
     config["api_key"] = api_key
     save_config(config)
+
+    if args.start_stream:
+        set_entertainment_stream(bridge_ip, api_key, args.start_stream, active=True)
+        return
+
+    if args.stop_stream:
+        set_entertainment_stream(bridge_ip, api_key, args.stop_stream, active=False)
+        return
 
     if args.color_flow:
         light_ids = [l.strip() for l in args.color_flow.split(",") if l.strip()]
@@ -866,9 +993,10 @@ def main():
     motion_sensors = parse_motion_sensors(sensors_data)
     switches = parse_switches(sensors_data)
     lights = parse_lights(lights_data)
+    entertainment_areas = get_entertainment_areas(bridge_ip, api_key)
 
     if args.json:
-        print(json.dumps({"sensors": motion_sensors, "switches": switches, "lights": lights}, indent=2))
+        print(json.dumps({"sensors": motion_sensors, "switches": switches, "lights": lights, "entertainment": entertainment_areas}, indent=2))
         return
 
     if args.monitor:
@@ -877,7 +1005,9 @@ def main():
         print_sensor_status(motion_sensors)
         print_switches_status(switches)
         print_lights_status(lights)
+        print_entertainment_status(entertainment_areas)
 
 
 if __name__ == "__main__":
     main()
+
