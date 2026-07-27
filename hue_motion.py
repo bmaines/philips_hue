@@ -4,6 +4,7 @@ Philips Hue Motion Sensor, Light & Switch Control
 --------------------------------------------------
 Detects motion sensors, switches, and lights on your Philips Hue Bridge,
 reporting real-time motion status, button presses, light states, color, battery levels, temperature, and lux.
+Includes customizable sequential light chaser engine (custom flash duration in ms or BPM, flash colors, and idle restore/off modes).
 """
 
 import os
@@ -12,11 +13,16 @@ import time
 import json
 import argparse
 import colorsys
+import threading
 from datetime import datetime, timezone
 import urllib.request
 import urllib.error
 
 CONFIG_FILE = os.path.expanduser("~/Documents/Philips_Hue/.hue_config.json")
+
+# Global thread reference for web chaser daemon
+CHASER_THREAD = None
+CHASER_STOP_EVENT = threading.Event()
 
 
 def discover_bridge_ip():
@@ -133,6 +139,18 @@ def get_lights_v1(bridge_ip, username):
         return None
 
 
+def set_light_state_raw(bridge_ip, username, light_id, payload):
+    """Direct low-level state update to Hue light."""
+    url = f"http://{bridge_ip}/api/{username}/lights/{light_id}/state"
+    data = json.dumps(payload).encode("utf-8")
+    try:
+        req = urllib.request.Request(url, data=data, method="PUT", headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=2) as res:
+            return json.loads(res.read().decode())
+    except Exception as e:
+        return None
+
+
 def hex_to_hue_sat_bri(hex_str):
     """Convert Hex RGB string (e.g. #FF0000) to Hue (0-65535), Saturation (0-254), and Brightness (1-254)."""
     hex_str = hex_str.lstrip("#")
@@ -162,7 +180,6 @@ def hue_sat_to_hex(hue_val, sat_val, bri_val=254):
 
 def set_light_state(bridge_ip, username, light_id, on_state=True, brightness=None, hex_color=None, hue=None, sat=None, ct=None):
     """Turn light ON/OFF, change brightness, or set color via Hue API v1."""
-    url = f"http://{bridge_ip}/api/{username}/lights/{light_id}/state"
     payload = {"on": bool(on_state)}
 
     if hex_color is not None:
@@ -183,15 +200,138 @@ def set_light_state(bridge_ip, username, light_id, on_state=True, brightness=Non
         bri_val = max(1, min(254, int((brightness / 100.0) * 254)))
         payload["bri"] = bri_val
 
-    data = json.dumps(payload).encode("utf-8")
+    return set_light_state_raw(bridge_ip, username, light_id, payload)
+
+
+def run_light_chaser(bridge_ip, username, light_ids, duration_ms=None, bpm=None, loops=5, flash_color="#ffffff", idle_mode="restore", stop_event=None):
+    """Flashes selected lights sequentially with explicit flash duration in ms or BPM."""
+    if not light_ids:
+        print("⚠️ No light IDs selected for chaser.")
+        return
+
+    if duration_ms is not None:
+        beat_interval = float(duration_ms) / 1000.0
+        dur_label = f"{duration_ms}ms"
+    elif bpm is not None:
+        beat_interval = 60.0 / float(bpm)
+        dur_label = f"{beat_interval*1000:.1f}ms ({bpm} BPM)"
+    else:
+        beat_interval = 0.235  # default 235ms (255 BPM)
+        dur_label = "235ms"
+
+    print(f"\n⚡ Starting Light Chaser: {len(light_ids)} lights in sequence | Flash Duration: {dur_label}")
+    print(f"Flash Color: {flash_color} | Idle Mode: {idle_mode.upper()}")
+    print(f"Sequence Order: {', '.join([str(l) for l in light_ids])}")
+
+    # Prepare flash payload
+    if flash_color.lower() in ("#ffffff", "white"):
+        flash_payload = {"on": True, "bri": 254, "ct": 154, "transitiontime": 0}
+    else:
+        h_val, s_val, v_val = hex_to_hue_sat_bri(flash_color)
+        flash_payload = {"on": True, "bri": 254, "hue": h_val, "sat": s_val, "transitiontime": 0}
+
+    # Backup complete initial state for every light in sequence
+    lights_data = get_lights_v1(bridge_ip, username) or {}
+    initial_states = {}
+    for lid in light_ids:
+        lid_str = str(lid)
+        if lid_str in lights_data:
+            st = lights_data[lid_str].get("state", {})
+            initial_states[lid_str] = {
+                "on": st.get("on", False),
+                "bri": st.get("bri", 254),
+                "hue": st.get("hue"),
+                "sat": st.get("sat"),
+                "ct": st.get("ct"),
+                "xy": st.get("xy"),
+                "colormode": st.get("colormode", "ct")
+            }
+
+    loop_count = 0
     try:
-        req = urllib.request.Request(url, data=data, method="PUT", headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=5) as res:
-            resp = json.loads(res.read().decode())
-            return resp
-    except Exception as e:
-        print(f"❌ Error setting light state: {e}")
-        return None
+        while (loops is None or loop_count < loops):
+            if stop_event and stop_event.is_set():
+                break
+
+            for lid in light_ids:
+                if stop_event and stop_event.is_set():
+                    break
+
+                lid_str = str(lid)
+                orig = initial_states.get(lid_str, {})
+
+                # Flash light ON with selected flash_color
+                set_light_state_raw(bridge_ip, username, lid_str, flash_payload)
+
+                time.sleep(beat_interval)
+
+                # Idle behavior between flashes
+                if idle_mode == "off":
+                    off_payload = {"on": False, "transitiontime": 0}
+                    set_light_state_raw(bridge_ip, username, lid_str, off_payload)
+                else:  # 'restore'
+                    restore_payload = {"on": orig.get("on", False), "transitiontime": 0}
+                    if orig.get("on", False):
+                        if orig.get("bri") is not None:
+                            restore_payload["bri"] = orig["bri"]
+
+                        colormode = orig.get("colormode", "ct")
+                        if colormode == "hs" and orig.get("hue") is not None:
+                            restore_payload["hue"] = orig["hue"]
+                            if orig.get("sat") is not None:
+                                restore_payload["sat"] = orig["sat"]
+                        elif colormode == "ct" and orig.get("ct") is not None:
+                            restore_payload["ct"] = orig["ct"]
+                        elif orig.get("xy") is not None:
+                            restore_payload["xy"] = orig["xy"]
+
+                    set_light_state_raw(bridge_ip, username, lid_str, restore_payload)
+
+            loop_count += 1
+
+    except KeyboardInterrupt:
+        print("\n🛑 Chaser stopped by user.")
+    finally:
+        # Final cleanup restore after all loops finish
+        print("🔄 Restoring initial light states...")
+        for lid_str, orig in initial_states.items():
+            final_payload = {"on": orig.get("on", False), "transitiontime": 1}
+            if orig.get("on", False):
+                if orig.get("bri") is not None:
+                    final_payload["bri"] = orig["bri"]
+                colormode = orig.get("colormode", "ct")
+                if colormode == "hs" and orig.get("hue") is not None:
+                    final_payload["hue"] = orig["hue"]
+                    if orig.get("sat") is not None:
+                        final_payload["sat"] = orig["sat"]
+                elif colormode == "ct" and orig.get("ct") is not None:
+                    final_payload["ct"] = orig["ct"]
+
+            set_light_state_raw(bridge_ip, username, lid_str, final_payload)
+        print("✅ Light Chaser finished.\n")
+
+
+def start_chaser_daemon(bridge_ip, username, light_ids, duration_ms=None, bpm=None, loops=10, flash_color="#ffffff", idle_mode="restore"):
+    """Start light chaser in a background thread."""
+    global CHASER_THREAD, CHASER_STOP_EVENT
+
+    stop_chaser_daemon()
+
+    CHASER_STOP_EVENT.clear()
+    CHASER_THREAD = threading.Thread(
+        target=run_light_chaser,
+        args=(bridge_ip, username, light_ids, duration_ms, bpm, loops, flash_color, idle_mode, CHASER_STOP_EVENT),
+        daemon=True
+    )
+    CHASER_THREAD.start()
+    return True
+
+
+def stop_chaser_daemon():
+    """Stop running background chaser daemon."""
+    global CHASER_STOP_EVENT
+    CHASER_STOP_EVENT.set()
+    return True
 
 
 def format_button_event(event_code):
@@ -332,7 +472,6 @@ def parse_lights(lights_data):
         ct_val = state.get("ct")
         colormode = state.get("colormode", "ct")
 
-        # Convert Hue/Sat to Hex color string for UI representation
         if hue_val is not None and sat_val is not None:
             hex_color = hue_sat_to_hex(hue_val, sat_val, bri if bri else 254)
         else:
@@ -523,6 +662,14 @@ def main():
     parser.add_argument("--sat", type=int, help="Set saturation value (0-254)")
     parser.add_argument("--ct", type=int, help="Set color temperature (154-500 mireds)")
 
+    # Chaser CLI args
+    parser.add_argument("--chaser", help="Comma-separated light IDs to run sequence chaser (e.g., '1,2,3')")
+    parser.add_argument("--duration-ms", type=int, help="Flash duration per light in milliseconds (e.g. 200, 500)")
+    parser.add_argument("--bpm", type=int, help="Speed in BPM for light chaser (default: 255 BPM if duration-ms not set)")
+    parser.add_argument("--loops", type=int, default=5, help="Number of chaser loops (default: 5)")
+    parser.add_argument("--flash-color", default="#ffffff", help="Color to flash to (hex string e.g. '#ffffff' or '#ff0000')")
+    parser.add_argument("--idle-mode", choices=["restore", "off"], default="restore", help="State between flashes: 'restore' (original color) or 'off'")
+
     args = parser.parse_args()
 
     config = load_config()
@@ -538,6 +685,15 @@ def main():
     config["bridge_ip"] = bridge_ip
     config["api_key"] = api_key
     save_config(config)
+
+    if args.chaser:
+        light_ids = [l.strip() for l in args.chaser.split(",") if l.strip()]
+        run_light_chaser(
+            bridge_ip, api_key, light_ids,
+            duration_ms=args.duration_ms, bpm=args.bpm, loops=args.loops,
+            flash_color=args.flash_color, idle_mode=args.idle_mode
+        )
+        return
 
     if args.toggle_light:
         lights_data = get_lights_v1(bridge_ip, api_key)

@@ -2,7 +2,8 @@
 """
 Philips Hue Motion Sensor, Switch & Light Dashboard Server
 ------------------------------------------------------------
-Provides a local web dashboard to monitor Hue motion sensors, switches/buttons, and control light brightness & color in real time.
+Provides a local web dashboard to monitor Hue motion sensors, switches/buttons, control lights,
+and run customizable sequential light chasers in real time.
 """
 
 import os
@@ -15,7 +16,8 @@ import urllib.error
 from hue_motion import (
     discover_bridge_ip, load_config, save_config,
     get_sensors_v1, get_lights_v1, parse_motion_sensors,
-    parse_switches, parse_lights, set_light_state, pair_bridge, CONFIG_FILE
+    parse_switches, parse_lights, set_light_state, pair_bridge,
+    start_chaser_daemon, stop_chaser_daemon, CONFIG_FILE
 )
 
 PORT = 8080
@@ -61,6 +63,32 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response({"success": True})
             except Exception as e:
                 self.send_json_response({"success": False, "error": str(e)})
+        elif self.path == "/api/chaser/start":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                payload = json.loads(body)
+                light_ids = payload.get("light_ids", [])
+                duration_ms = payload.get("duration_ms")
+                bpm = payload.get("bpm")
+                loops = payload.get("loops", 10)
+                flash_color = payload.get("flash_color", "#ffffff")
+                idle_mode = payload.get("idle_mode", "restore")
+                config = load_config()
+                bridge_ip = config.get("bridge_ip") or "192.168.68.53"
+                api_key = config.get("api_key")
+                start_chaser_daemon(
+                    bridge_ip, api_key, light_ids,
+                    duration_ms=duration_ms, bpm=bpm, loops=loops,
+                    flash_color=flash_color, idle_mode=idle_mode
+                )
+                dur_str = f"{duration_ms}ms" if duration_ms else f"{bpm} BPM"
+                self.send_json_response({"success": True, "message": f"Chaser started ({dur_str}, {flash_color}, {idle_mode})"})
+            except Exception as e:
+                self.send_json_response({"success": False, "error": str(e)})
+        elif self.path == "/api/chaser/stop":
+            stop_chaser_daemon()
+            self.send_json_response({"success": True, "message": "Chaser stopped"})
         elif self.path.startswith("/api/lights/"):
             parts = self.path.strip("/").split("/")
             if len(parts) >= 4 and parts[2] != "" and parts[3] == "state":

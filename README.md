@@ -1,6 +1,6 @@
 # 🏃 Philips Hue Motion Detector & Light Dashboard
 
-A fast, zero-dependency local monitoring and control system for Philips Hue hardware. Provides real-time motion detection, ambient light (lux), temperature monitoring, battery health tracking, and interactive light power/brightness/color controls.
+A fast, zero-dependency local monitoring and control system for Philips Hue hardware. Provides real-time motion detection, ambient light (lux), temperature monitoring, battery health tracking, interactive light power/brightness/color controls, and a customizable sequential light chaser engine.
 
 ![Python 3](https://img.shields.io/badge/Python-3.8%2B-blue.svg)
 ![Dependencies](https://img.shields.io/badge/Dependencies-Zero%20(Standard%20Lib)-success.svg)
@@ -13,6 +13,8 @@ A fast, zero-dependency local monitoring and control system for Philips Hue hard
 
 * 🏃 **Real-Time Motion Sensing:** Detects motion (`ZLLPresence` / `CLIPPresence`) with human-readable relative timestamps (*e.g., "12 seconds ago"*).
 * 🔘 **Switch & Button Event Tracking:** Monitors Hue Dimmer Switch button presses (On, Off, Dim Up, Dim Down, Short & Long Press).
+* ⚡ **Sequential Light Chaser Engine:** High-speed sequential light animations with custom flash durations (ms), custom flash colors (white, red, green, blue, purple, yellow, or hex), and state preservation.
+* 🔀 **Re-orderable Light Sequences:** Interactively reorder light sequence execution using Up (⬆️) and Down (⬇️) controls in the Web UI.
 * 🎨 **Full Light Color & Brightness Control:** Change light colors using preset pills or an interactive HTML color picker (`<input type="color">`), with automatic RGB-to-Hue/Sat conversion via standard library `colorsys`.
 * 💡 **Interactive Light Power Control:** Toggle power state and adjust brightness (0–100%) from Web UI or CLI.
 * 🌡️ **Environmental Metrics:** Monitors temperature (°C and °F) and ambient light levels (Lux) reported by Hue Motion Sensors.
@@ -53,6 +55,12 @@ python3 hue_motion.py --monitor
 # Output raw JSON data
 python3 hue_motion.py --json
 
+# Run Light Chaser sequence on Light IDs 1, 2, 3 with custom flash duration (500ms)
+python3 hue_motion.py --chaser "1,2,3" --duration-ms 500 --loops 5
+
+# Run Light Chaser with custom flash color (Red) and keep previous colors between flashes
+python3 hue_motion.py --chaser "1,2,3" --duration-ms 200 --flash-color "#ff0000" --idle-mode restore
+
 # Toggle a light by ID (e.g. Light ID 1)
 python3 hue_motion.py --toggle-light 1
 
@@ -81,9 +89,9 @@ python3 hue_motion.py --ip 192.168.68.53 --pair
 
 | File | Description |
 | :--- | :--- |
-| **[hue_motion.py](file:///home/brandon/Documents/Philips_Hue/hue_motion.py)** | CLI motion & switch detector, live monitor loop, bridge pairing, and light color/brightness controller. |
-| **[server.py](file:///home/brandon/Documents/Philips_Hue/server.py)** | Native Python HTTP server (`http.server`) serving REST endpoints & web UI on port `8080`. |
-| **[index.html](file:///home/brandon/Documents/Philips_Hue/index.html)** | Glassmorphism dark-mode web dashboard UI with color pickers, preset pills, live switch/motion updates & audio alerts. |
+| **[hue_motion.py](file:///home/brandon/Documents/Philips_Hue/hue_motion.py)** | CLI motion & switch detector, live monitor loop, bridge pairing, light chaser engine, and color/brightness controller. |
+| **[server.py](file:///home/brandon/Documents/Philips_Hue/server.py)** | Native Python HTTP server (`http.server`) serving REST endpoints, chaser daemon & web UI on port `8080`. |
+| **[index.html](file:///home/brandon/Documents/Philips_Hue/index.html)** | Glassmorphism dark-mode web dashboard UI with re-orderable light chaser, color pickers, preset pills, live switch/motion updates & audio alerts. |
 | **[AGENTS.md](file:///home/brandon/Documents/Philips_Hue/AGENTS.md)** | AI Agent instructions and project guidelines. |
 | **`.gemini/rules/`** | Google Antigravity project ruleset. |
 
@@ -95,6 +103,8 @@ The `server.py` daemon exposes the following REST endpoints:
 
 * **`GET /api/status`**: Returns JSON object containing bridge IP, connection status, sensors, switches, and lights with color Hex data.
 * **`POST /api/pair`**: Initiates link button pairing handshake.
+* **`POST /api/chaser/start`**: Starts light chaser sequence daemon. Payload: `{"light_ids": ["1", "2"], "duration_ms": 235, "flash_color": "#ffffff", "idle_mode": "restore", "loops": 10}`.
+* **`POST /api/chaser/stop`**: Stops active light chaser sequence daemon.
 * **`POST /api/lights/<id>/state`**: Updates light state. Payload: `{"on": true/false, "brightness": 1..100, "hex": "#ff0000"}`.
 
 ---

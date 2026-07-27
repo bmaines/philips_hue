@@ -160,6 +160,12 @@
       overflow: hidden;
     }
 
+    .card.chaser-panel {
+      background: linear-gradient(135deg, rgba(10, 132, 255, 0.1), rgba(100, 210, 255, 0.05));
+      border-color: rgba(100, 210, 255, 0.3);
+      margin-bottom: 2rem;
+    }
+
     .card.motion-active {
       border-color: rgba(255, 59, 48, 0.6);
       box-shadow: 0 0 30px var(--glow-red);
@@ -378,6 +384,124 @@
       transform: scale(1.2);
     }
 
+    .preset-chip {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .preset-chip:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: var(--accent-cyan);
+    }
+
+    .chaser-selector-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin: 1rem 0;
+    }
+
+    .chaser-item {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      padding: 0.6rem 1rem;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    .chaser-item-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .chaser-badge-num {
+      background: rgba(100, 210, 255, 0.2);
+      color: var(--accent-cyan);
+      font-weight: 700;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+    }
+
+    .arrow-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      transition: all 0.15s;
+    }
+
+    .arrow-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.2);
+      transform: scale(1.1);
+    }
+
+    .arrow-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .chaser-options-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .chaser-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .chaser-input {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.5rem 0.8rem;
+      border-radius: 8px;
+      width: 100%;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .select-input {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--card-border);
+      color: var(--text-main);
+      padding: 0.5rem 0.8rem;
+      border-radius: 8px;
+      width: 100%;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
     .banner {
       background: rgba(255, 159, 10, 0.15);
       border: 1px solid rgba(255, 159, 10, 0.3);
@@ -413,6 +537,15 @@
       transition: all 0.2s;
     }
 
+    .btn-chaser {
+      background: linear-gradient(135deg, #0a84ff, #64d2ff);
+      box-shadow: 0 4px 14px rgba(100, 210, 255, 0.3);
+    }
+
+    .btn-stop {
+      background: var(--accent-red);
+    }
+
     .btn:hover {
       opacity: 0.9;
       transform: translateY(-1px);
@@ -428,9 +561,9 @@
 <div class="container">
   <header>
     <div class="logo-area">
-      <div class="logo-icon">🎛️</div>
+      <div class="logo-icon">⚡</div>
       <div>
-        <h1>Hue Motion, Switch & Lights</h1>
+        <h1>Hue Motion, Switch & Light Chaser</h1>
         <div class="subtitle" id="bridge-info">Connected to Philips Hue Bridge</div>
       </div>
     </div>
@@ -453,6 +586,73 @@
     <button class="btn" onclick="triggerPair()">Pair Now</button>
   </div>
 
+  <!-- Light Chaser Panel -->
+  <div class="card chaser-panel">
+    <div class="card-header">
+      <div>
+        <div class="sensor-title">⚡ Sequential Light Chaser Settings</div>
+        <div class="sensor-model">Customize flash duration (ms), flash color, sequence order, and between-flashes state</div>
+      </div>
+      <div class="status-indicator switch-badge">
+        <span>CUSTOM CHASER</span>
+      </div>
+    </div>
+
+    <div style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 0.5rem;">Light Sequence Order (Top to Bottom):</div>
+    <div class="chaser-selector-list" id="chaser-light-selector">
+      <!-- Re-orderable list populated dynamically -->
+    </div>
+
+    <div class="chaser-options-grid">
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Flash Duration (ms):</span>
+        <input type="number" id="chaser-duration-ms" value="235" min="20" max="5000" class="chaser-input">
+        <div style="display: flex; gap: 0.3rem; margin-top: 0.4rem;">
+          <button class="preset-chip" onclick="setDurationPreset(100)">100ms</button>
+          <button class="preset-chip" onclick="setDurationPreset(235)">235ms</button>
+          <button class="preset-chip" onclick="setDurationPreset(500)">500ms</button>
+          <button class="preset-chip" onclick="setDurationPreset(1000)">1s</button>
+          <button class="preset-chip" onclick="setDurationPreset(2000)">2s</button>
+        </div>
+      </div>
+
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Flash Color:</span>
+        <div style="display: flex; align-items: center; gap: 0.5rem; height: 38px;">
+          <input type="color" id="chaser-flash-color" value="#ffffff" class="color-picker">
+          <div class="color-presets">
+            <div class="color-pill" style="background: #ffffff;" title="Cold White" onclick="setChaserFlashColor('#ffffff')"></div>
+            <div class="color-pill" style="background: #ff3b30;" title="Red" onclick="setChaserFlashColor('#ff3b30')"></div>
+            <div class="color-pill" style="background: #34c759;" title="Green" onclick="setChaserFlashColor('#34c759')"></div>
+            <div class="color-pill" style="background: #0a84ff;" title="Blue" onclick="setChaserFlashColor('#0a84ff')"></div>
+            <div class="color-pill" style="background: #af52de;" title="Purple" onclick="setChaserFlashColor('#af52de')"></div>
+            <div class="color-pill" style="background: #ffcc00;" title="Yellow" onclick="setChaserFlashColor('#ffcc00')"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Between Flashes State:</span>
+        <select id="chaser-idle-mode" class="select-input">
+          <option value="restore" selected>🔄 Keep Previous Colors</option>
+          <option value="off">🌑 Turn OFF Between Flashes</option>
+        </select>
+      </div>
+
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Loops:</span>
+        <input type="number" id="chaser-loops" value="10" min="1" max="100" class="chaser-input">
+      </div>
+    </div>
+
+    <div class="chaser-controls">
+      <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+        <button class="btn btn-chaser" onclick="startChaser()">▶️ Start Sequence</button>
+        <button class="btn btn-stop" onclick="stopChaser()">⏹️ Stop</button>
+      </div>
+    </div>
+  </div>
+
   <div class="section-title">🏃 Motion Sensors</div>
   <div class="grid" id="sensor-grid"></div>
 
@@ -467,6 +667,8 @@
   let soundEnabled = true;
   let prevMotionMap = {};
   let prevSwitchMap = {};
+  let cachedLights = [];
+  let orderedChaserLights = [];
 
   function toggleSound() {
     soundEnabled = !soundEnabled;
@@ -527,12 +729,122 @@
       banner.classList.add('hidden');
       bridgeInfo.textContent = `Bridge IP: ${data.bridge_ip}`;
 
+      cachedLights = data.lights || [];
+
+      updateChaserOrderList(cachedLights);
       renderSensors(data.sensors || []);
       renderSwitches(data.switches || []);
-      renderLights(data.lights || []);
+      renderLights(cachedLights);
     } catch(e) {
       console.error('Error fetching status:', e);
     }
+  }
+
+  function updateChaserOrderList(lights) {
+    const currentMap = new Map(orderedChaserLights.map(l => [l.id, l]));
+    const nextList = [];
+
+    for (const l of orderedChaserLights) {
+      const updated = lights.find(item => item.id === l.id);
+      if (updated) {
+        nextList.push({ ...updated, checked: l.checked !== undefined ? l.checked : true });
+      }
+    }
+
+    for (const l of lights) {
+      if (!currentMap.has(l.id)) {
+        nextList.push({ ...l, checked: true });
+      }
+    }
+
+    orderedChaserLights = nextList;
+    renderChaserSelector();
+  }
+
+  function moveChaserLight(index, dir) {
+    const targetIdx = index + dir;
+    if (targetIdx < 0 || targetIdx >= orderedChaserLights.length) return;
+
+    const temp = orderedChaserLights[index];
+    orderedChaserLights[index] = orderedChaserLights[targetIdx];
+    orderedChaserLights[targetIdx] = temp;
+
+    renderChaserSelector();
+  }
+
+  function toggleChaserLightChecked(index, isChecked) {
+    if (orderedChaserLights[index]) {
+      orderedChaserLights[index].checked = isChecked;
+    }
+  }
+
+  function setChaserFlashColor(colorHex) {
+    document.getElementById('chaser-flash-color').value = colorHex;
+  }
+
+  function setDurationPreset(ms) {
+    document.getElementById('chaser-duration-ms').value = ms;
+  }
+
+  function renderChaserSelector() {
+    const container = document.getElementById('chaser-light-selector');
+    const total = orderedChaserLights.length;
+
+    container.innerHTML = orderedChaserLights.map((l, idx) => `
+      <div class="chaser-item">
+        <div class="chaser-item-left">
+          <input type="checkbox" ${l.checked ? 'checked' : ''} onchange="toggleChaserLightChecked(${idx}, this.checked)" style="accent-color: var(--accent-cyan); cursor: pointer;">
+          <div class="chaser-badge-num">${idx + 1}</div>
+          <span style="font-weight: 600;">💡 ${l.name} <span style="font-size: 0.75rem; color: var(--text-sub);">(ID ${l.id})</span></span>
+        </div>
+        <div style="display: flex; gap: 0.3rem;">
+          <button class="arrow-btn" onclick="moveChaserLight(${idx}, -1)" ${idx === 0 ? 'disabled' : ''} title="Move Up in Sequence">⬆️</button>
+          <button class="arrow-btn" onclick="moveChaserLight(${idx}, 1)" ${idx === total - 1 ? 'disabled' : ''} title="Move Down in Sequence">⬇️</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function startChaser() {
+    const selectedIds = orderedChaserLights
+      .filter(l => l.checked)
+      .map(l => l.id);
+
+    if (selectedIds.length === 0) {
+      alert('Please check at least 1 light to run the sequence.');
+      return;
+    }
+
+    const durationMs = parseInt(document.getElementById('chaser-duration-ms').value) || 235;
+    const loops = parseInt(document.getElementById('chaser-loops').value) || 10;
+    const flashColor = document.getElementById('chaser-flash-color').value || '#ffffff';
+    const idleMode = document.getElementById('chaser-idle-mode').value || 'restore';
+
+    try {
+      const res = await fetch('/api/chaser/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          light_ids: selectedIds,
+          duration_ms: durationMs,
+          loops: loops,
+          flash_color: flashColor,
+          idle_mode: idleMode
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        console.log('Chaser started:', data.message);
+      }
+    } catch(e) {
+      alert('Error starting chaser: ' + e);
+    }
+  }
+
+  async function stopChaser() {
+    try {
+      await fetch('/api/chaser/stop', { method: 'POST' });
+    } catch(e) {}
   }
 
   function renderEmptyState(msg) {
