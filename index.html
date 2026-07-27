@@ -465,7 +465,7 @@
 
     .chaser-options-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 1rem;
       margin-top: 1rem;
       padding-top: 1rem;
@@ -591,7 +591,7 @@
     <div class="card-header">
       <div>
         <div class="sensor-title">⚡ Sequential Light Chaser Settings</div>
-        <div class="sensor-model">Customize flash duration (ms), flash color, sequence order, and between-flashes state</div>
+        <div class="sensor-model">Customize flash duration (ms), brightness, flash color, sequence order, and idle mode</div>
       </div>
       <div class="status-indicator switch-badge">
         <span>CUSTOM CHASER</span>
@@ -613,6 +613,14 @@
           <button class="preset-chip" onclick="setDurationPreset(500)">500ms</button>
           <button class="preset-chip" onclick="setDurationPreset(1000)">1s</button>
           <button class="preset-chip" onclick="setDurationPreset(2000)">2s</button>
+        </div>
+      </div>
+
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Flash Brightness: <span id="chaser-bri-val" style="color: var(--accent-yellow); font-weight: 700;">100%</span></span>
+        <div style="display: flex; align-items: center; gap: 0.5rem; height: 38px;">
+          <input type="range" id="chaser-flash-bri" min="1" max="100" value="100" class="slider" 
+                 oninput="document.getElementById('chaser-bri-val').textContent = this.value + '%'">
         </div>
       </div>
 
@@ -816,6 +824,7 @@
     }
 
     const durationMs = parseInt(document.getElementById('chaser-duration-ms').value) || 235;
+    const flashBri = parseInt(document.getElementById('chaser-flash-bri').value) || 100;
     const loops = parseInt(document.getElementById('chaser-loops').value) || 10;
     const flashColor = document.getElementById('chaser-flash-color').value || '#ffffff';
     const idleMode = document.getElementById('chaser-idle-mode').value || 'restore';
@@ -827,6 +836,7 @@
         body: JSON.stringify({
           light_ids: selectedIds,
           duration_ms: durationMs,
+          flash_bri: flashBri,
           loops: loops,
           flash_color: flashColor,
           idle_mode: idleMode

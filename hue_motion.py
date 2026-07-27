@@ -4,7 +4,7 @@ Philips Hue Motion Sensor, Light & Switch Control
 --------------------------------------------------
 Detects motion sensors, switches, and lights on your Philips Hue Bridge,
 reporting real-time motion status, button presses, light states, color, battery levels, temperature, and lux.
-Includes customizable sequential light chaser engine (custom flash duration in ms or BPM, flash colors, and idle restore/off modes).
+Includes customizable sequential light chaser engine (custom duration in ms/BPM, flash color, flash brightness, and idle restore/off modes).
 """
 
 import os
@@ -203,8 +203,8 @@ def set_light_state(bridge_ip, username, light_id, on_state=True, brightness=Non
     return set_light_state_raw(bridge_ip, username, light_id, payload)
 
 
-def run_light_chaser(bridge_ip, username, light_ids, duration_ms=None, bpm=None, loops=5, flash_color="#ffffff", idle_mode="restore", stop_event=None):
-    """Flashes selected lights sequentially with explicit flash duration in ms or BPM."""
+def run_light_chaser(bridge_ip, username, light_ids, duration_ms=None, bpm=None, loops=5, flash_color="#ffffff", flash_bri=100, idle_mode="restore", stop_event=None):
+    """Flashes selected lights sequentially with explicit flash duration, flash color, flash brightness, and idle_mode."""
     if not light_ids:
         print("⚠️ No light IDs selected for chaser.")
         return
@@ -216,19 +216,21 @@ def run_light_chaser(bridge_ip, username, light_ids, duration_ms=None, bpm=None,
         beat_interval = 60.0 / float(bpm)
         dur_label = f"{beat_interval*1000:.1f}ms ({bpm} BPM)"
     else:
-        beat_interval = 0.235  # default 235ms (255 BPM)
+        beat_interval = 0.235
         dur_label = "235ms"
 
-    print(f"\n⚡ Starting Light Chaser: {len(light_ids)} lights in sequence | Flash Duration: {dur_label}")
-    print(f"Flash Color: {flash_color} | Idle Mode: {idle_mode.upper()}")
+    raw_bri = max(1, min(254, int((float(flash_bri) / 100.0) * 254)))
+
+    print(f"\n⚡ Starting Light Chaser: {len(light_ids)} lights in sequence | Duration: {dur_label}")
+    print(f"Flash Color: {flash_color} | Flash Brightness: {flash_bri}% ({raw_bri}/254) | Idle Mode: {idle_mode.upper()}")
     print(f"Sequence Order: {', '.join([str(l) for l in light_ids])}")
 
     # Prepare flash payload
     if flash_color.lower() in ("#ffffff", "white"):
-        flash_payload = {"on": True, "bri": 254, "ct": 154, "transitiontime": 0}
+        flash_payload = {"on": True, "bri": raw_bri, "ct": 154, "transitiontime": 0}
     else:
-        h_val, s_val, v_val = hex_to_hue_sat_bri(flash_color)
-        flash_payload = {"on": True, "bri": 254, "hue": h_val, "sat": s_val, "transitiontime": 0}
+        h_val, s_val, _ = hex_to_hue_sat_bri(flash_color)
+        flash_payload = {"on": True, "bri": raw_bri, "hue": h_val, "sat": s_val, "transitiontime": 0}
 
     # Backup complete initial state for every light in sequence
     lights_data = get_lights_v1(bridge_ip, username) or {}
@@ -260,7 +262,7 @@ def run_light_chaser(bridge_ip, username, light_ids, duration_ms=None, bpm=None,
                 lid_str = str(lid)
                 orig = initial_states.get(lid_str, {})
 
-                # Flash light ON with selected flash_color
+                # Flash light ON with selected flash_color and flash_bri
                 set_light_state_raw(bridge_ip, username, lid_str, flash_payload)
 
                 time.sleep(beat_interval)
@@ -311,7 +313,7 @@ def run_light_chaser(bridge_ip, username, light_ids, duration_ms=None, bpm=None,
         print("✅ Light Chaser finished.\n")
 
 
-def start_chaser_daemon(bridge_ip, username, light_ids, duration_ms=None, bpm=None, loops=10, flash_color="#ffffff", idle_mode="restore"):
+def start_chaser_daemon(bridge_ip, username, light_ids, duration_ms=None, bpm=None, loops=10, flash_color="#ffffff", flash_bri=100, idle_mode="restore"):
     """Start light chaser in a background thread."""
     global CHASER_THREAD, CHASER_STOP_EVENT
 
@@ -320,7 +322,7 @@ def start_chaser_daemon(bridge_ip, username, light_ids, duration_ms=None, bpm=No
     CHASER_STOP_EVENT.clear()
     CHASER_THREAD = threading.Thread(
         target=run_light_chaser,
-        args=(bridge_ip, username, light_ids, duration_ms, bpm, loops, flash_color, idle_mode, CHASER_STOP_EVENT),
+        args=(bridge_ip, username, light_ids, duration_ms, bpm, loops, flash_color, flash_bri, idle_mode, CHASER_STOP_EVENT),
         daemon=True
     )
     CHASER_THREAD.start()
@@ -668,6 +670,7 @@ def main():
     parser.add_argument("--bpm", type=int, help="Speed in BPM for light chaser (default: 255 BPM if duration-ms not set)")
     parser.add_argument("--loops", type=int, default=5, help="Number of chaser loops (default: 5)")
     parser.add_argument("--flash-color", default="#ffffff", help="Color to flash to (hex string e.g. '#ffffff' or '#ff0000')")
+    parser.add_argument("--flash-bri", type=int, default=100, help="Flash brightness percentage (1-100%%, default: 100)")
     parser.add_argument("--idle-mode", choices=["restore", "off"], default="restore", help="State between flashes: 'restore' (original color) or 'off'")
 
     args = parser.parse_args()
@@ -691,7 +694,7 @@ def main():
         run_light_chaser(
             bridge_ip, api_key, light_ids,
             duration_ms=args.duration_ms, bpm=args.bpm, loops=args.loops,
-            flash_color=args.flash_color, idle_mode=args.idle_mode
+            flash_color=args.flash_color, flash_bri=args.flash_bri, idle_mode=args.idle_mode
         )
         return
 

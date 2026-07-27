@@ -73,6 +73,7 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                 bpm = payload.get("bpm")
                 loops = payload.get("loops", 10)
                 flash_color = payload.get("flash_color", "#ffffff")
+                flash_bri = payload.get("flash_bri", 100)
                 idle_mode = payload.get("idle_mode", "restore")
                 config = load_config()
                 bridge_ip = config.get("bridge_ip") or "192.168.68.53"
@@ -80,10 +81,10 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                 start_chaser_daemon(
                     bridge_ip, api_key, light_ids,
                     duration_ms=duration_ms, bpm=bpm, loops=loops,
-                    flash_color=flash_color, idle_mode=idle_mode
+                    flash_color=flash_color, flash_bri=flash_bri, idle_mode=idle_mode
                 )
                 dur_str = f"{duration_ms}ms" if duration_ms else f"{bpm} BPM"
-                self.send_json_response({"success": True, "message": f"Chaser started ({dur_str}, {flash_color}, {idle_mode})"})
+                self.send_json_response({"success": True, "message": f"Chaser started ({dur_str}, {flash_color}, bri: {flash_bri}%, {idle_mode})"})
             except Exception as e:
                 self.send_json_response({"success": False, "error": str(e)})
         elif self.path == "/api/chaser/stop":
