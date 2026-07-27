@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Philips Hue Motion Sensor, Light & Switch Detector
+Philips Hue Motion Sensor, Light & Switch Control
 --------------------------------------------------
 Detects motion sensors, switches, and lights on your Philips Hue Bridge,
-reporting real-time motion status, button presses, light states, battery levels, temperature, and lux.
+reporting real-time motion status, button presses, light states, color, battery levels, temperature, and lux.
 """
 
 import os
@@ -11,6 +11,7 @@ import sys
 import time
 import json
 import argparse
+import colorsys
 from datetime import datetime, timezone
 import urllib.request
 import urllib.error
@@ -132,10 +133,52 @@ def get_lights_v1(bridge_ip, username):
         return None
 
 
-def set_light_state(bridge_ip, username, light_id, on_state, brightness=None):
-    """Turn light ON/OFF or change brightness via Hue API v1."""
+def hex_to_hue_sat_bri(hex_str):
+    """Convert Hex RGB string (e.g. #FF0000) to Hue (0-65535), Saturation (0-254), and Brightness (1-254)."""
+    hex_str = hex_str.lstrip("#")
+    if len(hex_str) != 6:
+        return 0, 254, 254
+
+    r = int(hex_str[0:2], 16) / 255.0
+    g = int(hex_str[2:4], 16) / 255.0
+    b = int(hex_str[4:6], 16) / 255.0
+
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    hue_val = int(h * 65535)
+    sat_val = int(s * 254)
+    bri_val = max(1, int(v * 254))
+    return hue_val, sat_val, bri_val
+
+
+def hue_sat_to_hex(hue_val, sat_val, bri_val=254):
+    """Convert Hue (0-65535), Saturation (0-254), Brightness (1-254) to Hex RGB string."""
+    h = (hue_val % 65536) / 65535.0
+    s = (sat_val % 255) / 254.0
+    v = (bri_val % 255) / 254.0
+
+    r, g, b = colorsys.hsv_to_rgb(h, s, v)
+    return f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
+
+
+def set_light_state(bridge_ip, username, light_id, on_state=True, brightness=None, hex_color=None, hue=None, sat=None, ct=None):
+    """Turn light ON/OFF, change brightness, or set color via Hue API v1."""
     url = f"http://{bridge_ip}/api/{username}/lights/{light_id}/state"
     payload = {"on": bool(on_state)}
+
+    if hex_color is not None:
+        h_val, s_val, v_val = hex_to_hue_sat_bri(hex_color)
+        payload["hue"] = h_val
+        payload["sat"] = s_val
+        if brightness is None:
+            payload["bri"] = v_val
+
+    if hue is not None:
+        payload["hue"] = max(0, min(65535, int(hue)))
+    if sat is not None:
+        payload["sat"] = max(0, min(254, int(sat)))
+    if ct is not None:
+        payload["ct"] = max(154, min(500, int(ct)))
+
     if brightness is not None:
         bri_val = max(1, min(254, int((brightness / 100.0) * 254)))
         payload["bri"] = bri_val
@@ -158,8 +201,6 @@ def format_button_event(event_code):
 
     code = int(event_code)
 
-    # Standard 4-button dimmer switch codes:
-    # 1000..1003 = On/Top, 2000..2003 = Dim Up, 3000..3003 = Dim Down, 4000..4003 = Off/Bottom
     button_names = {
         1: "On Button",
         2: "Dim Up Button",
@@ -274,7 +315,7 @@ def parse_motion_sensors(sensors_data):
 
 
 def parse_lights(lights_data):
-    """Parse lights into structured list."""
+    """Parse lights into structured list with color data."""
     if not lights_data or not isinstance(lights_data, dict):
         return []
 
@@ -286,12 +327,28 @@ def parse_lights(lights_data):
         bri_pct = round((bri / 254.0) * 100) if bri is not None else 0
         reachable = state.get("reachable", True)
 
+        hue_val = state.get("hue")
+        sat_val = state.get("sat")
+        ct_val = state.get("ct")
+        colormode = state.get("colormode", "ct")
+
+        # Convert Hue/Sat to Hex color string for UI representation
+        if hue_val is not None and sat_val is not None:
+            hex_color = hue_sat_to_hex(hue_val, sat_val, bri if bri else 254)
+        else:
+            hex_color = "#ffcc00"
+
         lights_list.append({
             "id": lid,
             "name": ldata.get("name", f"Light {lid}"),
             "on": on_state,
             "brightness": bri_pct,
             "raw_bri": bri,
+            "hue": hue_val,
+            "sat": sat_val,
+            "ct": ct_val,
+            "colormode": colormode,
+            "hex_color": hex_color,
             "reachable": reachable,
             "type": ldata.get("type", "Light"),
             "model": ldata.get("modelid", "Unknown"),
@@ -394,6 +451,7 @@ def print_lights_status(lights):
         print(f"\n💡 Light: \033[1m{l['name']}\033[0m (ID: {l['id']} | Model: {l['model']})")
         print(f"   State:      {status_str}")
         print(f"   Brightness: {l['brightness']}%")
+        print(f"   Color Hex:  {l['hex_color']}")
         print(f"   Reachable:  {'Yes' if l['reachable'] else '❌ Offline'}")
 
     print("\n" + "=" * 65 + "\n")
@@ -416,7 +474,6 @@ def live_monitor(bridge_ip, username, interval=1.0):
 
             now_str = datetime.now().strftime("%H:%M:%S")
 
-            # Check motion sensors
             for s in sensors:
                 sid = s["id"]
                 prev_presence = last_motion_states.get(sid)
@@ -433,7 +490,6 @@ def live_monitor(bridge_ip, username, interval=1.0):
                     print(f"{now_str:<12} | {s['name']:<22} | {state_str:<37} | {last_seen}")
                     last_motion_states[sid] = curr_presence
 
-            # Check switches
             for sw in switches:
                 sw_id = sw["id"]
                 prev_time = last_switch_events.get(sw_id)
@@ -462,6 +518,10 @@ def main():
     parser.add_argument("--pair", action="store_true", help="Force re-pairing with Hue Bridge")
     parser.add_argument("--toggle-light", help="Light ID to toggle state (on/off)")
     parser.add_argument("--bri", type=int, help="Set brightness (0-100%%) for light")
+    parser.add_argument("--color", help="Set light color via hex string (e.g., '#FF0000')")
+    parser.add_argument("--hue", type=int, help="Set hue value (0-65535)")
+    parser.add_argument("--sat", type=int, help="Set saturation value (0-254)")
+    parser.add_argument("--ct", type=int, help="Set color temperature (154-500 mireds)")
 
     args = parser.parse_args()
 
@@ -484,9 +544,13 @@ def main():
         parsed_lights = parse_lights(lights_data)
         target = next((l for l in parsed_lights if str(l["id"]) == str(args.toggle_light)), None)
         if target:
-            new_state = not target["on"]
-            print(f"Toggling light {target['name']} (ID {args.toggle_light}) -> {'ON' if new_state else 'OFF'}")
-            set_light_state(bridge_ip, api_key, args.toggle_light, new_state, args.bri)
+            new_state = not target["on"] if (args.color is None and args.hue is None and args.bri is None) else True
+            print(f"Setting light {target['name']} (ID {args.toggle_light}) -> {'ON' if new_state else 'OFF'}")
+            set_light_state(
+                bridge_ip, api_key, args.toggle_light,
+                on_state=new_state, brightness=args.bri,
+                hex_color=args.color, hue=args.hue, sat=args.sat, ct=args.ct
+            )
         else:
             print(f"Light ID {args.toggle_light} not found.")
         return

@@ -2,7 +2,7 @@
 """
 Philips Hue Motion Sensor, Switch & Light Dashboard Server
 ------------------------------------------------------------
-Provides a local web dashboard to monitor Hue motion sensors, switches/buttons, and control lights in real time.
+Provides a local web dashboard to monitor Hue motion sensors, switches/buttons, and control light brightness & color in real time.
 """
 
 import os
@@ -74,7 +74,15 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                     api_key = config.get("api_key")
                     on_state = payload.get("on", True)
                     bri = payload.get("brightness")
-                    res = set_light_state(bridge_ip, api_key, light_id, on_state, bri)
+                    hex_color = payload.get("hex") or payload.get("color")
+                    hue = payload.get("hue")
+                    sat = payload.get("sat")
+                    ct = payload.get("ct")
+                    res = set_light_state(
+                        bridge_ip, api_key, light_id,
+                        on_state=on_state, brightness=bri,
+                        hex_color=hex_color, hue=hue, sat=sat, ct=ct
+                    )
                     self.send_json_response({"success": True, "result": res})
                 except Exception as e:
                     self.send_json_response({"success": False, "error": str(e)})

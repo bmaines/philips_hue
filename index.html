@@ -283,11 +283,18 @@
 
     .light-controls {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-direction: column;
+      gap: 0.8rem;
       margin-top: 1rem;
       padding-top: 1rem;
       border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
     }
 
     .toggle-btn {
@@ -324,6 +331,51 @@
       width: 100%;
       accent-color: var(--accent-yellow);
       cursor: pointer;
+    }
+
+    .color-picker-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .color-picker {
+      -webkit-appearance: none;
+      border: 1px solid var(--card-border);
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      cursor: pointer;
+      background: transparent;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .color-picker::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    .color-picker::-webkit-color-swatch {
+      border: none;
+      border-radius: 6px;
+    }
+
+    .color-presets {
+      display: flex;
+      gap: 0.35rem;
+    }
+
+    .color-pill {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    .color-pill:hover {
+      transform: scale(1.2);
     }
 
     .banner {
@@ -637,15 +689,16 @@
 
     grid.innerHTML = lights.map(l => {
       const isOn = l.on;
+      const cardGlow = isOn && l.hex_color ? `border-color: ${l.hex_color}; box-shadow: 0 0 25px ${l.hex_color}55;` : '';
 
       return `
-        <div class="card ${isOn ? 'light-on' : ''}">
+        <div class="card ${isOn ? 'light-on' : ''}" style="${cardGlow}">
           <div class="card-header">
             <div>
               <div class="sensor-title">${l.name}</div>
               <div class="sensor-model">${l.productname || l.type} • ID ${l.id}</div>
             </div>
-            <div class="status-indicator ${isOn ? 'light-on' : 'light-off'}">
+            <div class="status-indicator ${isOn ? 'light-on' : 'light-off'}" style="${isOn && l.hex_color ? `background: ${l.hex_color}33; color: ${l.hex_color}; border-color: ${l.hex_color}aa;` : ''}">
               <span>${isOn ? '💡 ON' : '🌑 OFF'}</span>
             </div>
           </div>
@@ -662,13 +715,32 @@
           </div>
 
           <div class="light-controls">
-            <button class="toggle-btn ${isOn ? 'is-on' : ''}" onclick="toggleLight('${l.id}', ${!isOn})">
-              ${isOn ? 'Turn Off' : 'Turn On'}
-            </button>
-            <div class="slider-container">
-              <input type="range" min="1" max="100" value="${l.brightness}" class="slider" 
-                     onchange="setBrightness('${l.id}', this.value)" ${!isOn ? 'disabled' : ''}>
-              <span style="font-size: 0.8rem; color: var(--text-sub);">${l.brightness}%</span>
+            <div class="control-row">
+              <button class="toggle-btn ${isOn ? 'is-on' : ''}" onclick="toggleLight('${l.id}', ${!isOn})">
+                ${isOn ? 'Turn Off' : 'Turn On'}
+              </button>
+              <div class="slider-container">
+                <input type="range" min="1" max="100" value="${l.brightness}" class="slider" 
+                       onchange="setBrightness('${l.id}', this.value)" ${!isOn ? 'disabled' : ''}>
+                <span style="font-size: 0.8rem; color: var(--text-sub);">${l.brightness}%</span>
+              </div>
+            </div>
+
+            <div class="control-row">
+              <span style="font-size: 0.75rem; color: var(--text-sub);">Color:</span>
+              <div class="color-presets">
+                <div class="color-pill" style="background: #ff3b30;" title="Red" onclick="setLightColor('${l.id}', '#ff3b30')"></div>
+                <div class="color-pill" style="background: #ff9500;" title="Orange" onclick="setLightColor('${l.id}', '#ff9500')"></div>
+                <div class="color-pill" style="background: #ffcc00;" title="Warm White" onclick="setLightColor('${l.id}', '#ffcc00')"></div>
+                <div class="color-pill" style="background: #34c759;" title="Green" onclick="setLightColor('${l.id}', '#34c759')"></div>
+                <div class="color-pill" style="background: #64d2ff;" title="Cyan" onclick="setLightColor('${l.id}', '#64d2ff')"></div>
+                <div class="color-pill" style="background: #0a84ff;" title="Blue" onclick="setLightColor('${l.id}', '#0a84ff')"></div>
+                <div class="color-pill" style="background: #af52de;" title="Purple" onclick="setLightColor('${l.id}', '#af52de')"></div>
+              </div>
+              <div class="color-picker-wrapper">
+                <input type="color" value="${l.hex_color || '#ffcc00'}" class="color-picker" 
+                       onchange="setLightColor('${l.id}', this.value)" ${!isOn ? 'disabled' : ''}>
+              </div>
             </div>
           </div>
         </div>
@@ -699,6 +771,19 @@
       fetchStatus();
     } catch(e) {
       console.error('Error setting brightness:', e);
+    }
+  }
+
+  async function setLightColor(lightId, hexColor) {
+    try {
+      await fetch(`/api/lights/${lightId}/state`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on: true, hex: hexColor })
+      });
+      fetchStatus();
+    } catch(e) {
+      console.error('Error setting color:', e);
     }
   }
 
