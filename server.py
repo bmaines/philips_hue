@@ -3,7 +3,7 @@
 Philips Hue Motion Sensor, Switch & Light Dashboard Server
 ------------------------------------------------------------
 Provides a local web dashboard to monitor Hue motion sensors, switches/buttons, control lights,
-and run customizable sequential light chasers in real time.
+and run customizable sequential light chasers & two-color smooth flow transitions in real time.
 """
 
 import os
@@ -17,7 +17,8 @@ from hue_motion import (
     discover_bridge_ip, load_config, save_config,
     get_sensors_v1, get_lights_v1, parse_motion_sensors,
     parse_switches, parse_lights, set_light_state, pair_bridge,
-    start_chaser_daemon, stop_chaser_daemon, CONFIG_FILE
+    start_chaser_daemon, stop_chaser_daemon,
+    start_color_flow_daemon, stop_color_flow_daemon, CONFIG_FILE
 )
 
 PORT = 8080
@@ -63,6 +64,31 @@ class HueDashboardHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response({"success": True})
             except Exception as e:
                 self.send_json_response({"success": False, "error": str(e)})
+        elif self.path == "/api/color_flow/start":
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            try:
+                payload = json.loads(body)
+                light_ids = payload.get("light_ids", [])
+                color_a = payload.get("color_a", "#ff0000")
+                color_b = payload.get("color_b", "#0000ff")
+                duration_sec = payload.get("duration_sec", 2.0)
+                flow_bri = payload.get("flow_bri", 100)
+                loops = payload.get("loops", 10)
+                config = load_config()
+                bridge_ip = config.get("bridge_ip") or "192.168.68.53"
+                api_key = config.get("api_key")
+                start_color_flow_daemon(
+                    bridge_ip, api_key, light_ids,
+                    color_a=color_a, color_b=color_b,
+                    duration_sec=duration_sec, flow_bri=flow_bri, loops=loops
+                )
+                self.send_json_response({"success": True, "message": f"Color Flow started ({color_a} ↔ {color_b}, {duration_sec}s, bri: {flow_bri}%)"})
+            except Exception as e:
+                self.send_json_response({"success": False, "error": str(e)})
+        elif self.path == "/api/color_flow/stop":
+            stop_color_flow_daemon()
+            self.send_json_response({"success": True, "message": "Color Flow stopped"})
         elif self.path == "/api/chaser/start":
             content_length = int(self.headers.get('Content-Length', 0))
             body = self.rfile.read(content_length).decode('utf-8')

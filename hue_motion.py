@@ -4,7 +4,7 @@ Philips Hue Motion Sensor, Light & Switch Control
 --------------------------------------------------
 Detects motion sensors, switches, and lights on your Philips Hue Bridge,
 reporting real-time motion status, button presses, light states, color, battery levels, temperature, and lux.
-Includes customizable sequential light chaser engine (custom duration in ms/BPM, flash color, flash brightness, and idle restore/off modes).
+Includes customizable sequential light chasers and two-color smooth flow transition engines.
 """
 
 import os
@@ -20,9 +20,12 @@ import urllib.error
 
 CONFIG_FILE = os.path.expanduser("~/Documents/Philips_Hue/.hue_config.json")
 
-# Global thread reference for web chaser daemon
+# Global thread references for background daemons
 CHASER_THREAD = None
 CHASER_STOP_EVENT = threading.Event()
+
+COLOR_FLOW_THREAD = None
+COLOR_FLOW_STOP_EVENT = threading.Event()
 
 
 def discover_bridge_ip():
@@ -201,6 +204,120 @@ def set_light_state(bridge_ip, username, light_id, on_state=True, brightness=Non
         payload["bri"] = bri_val
 
     return set_light_state_raw(bridge_ip, username, light_id, payload)
+
+
+def run_color_flow(bridge_ip, username, light_ids, color_a="#ff0000", color_b="#0000ff", duration_sec=2.0, flow_bri=100, loops=10, stop_event=None):
+    """Smoothly transitions selected lights back and forth between two colors with natural hardware flow."""
+    if not light_ids:
+        print("⚠️ No light IDs selected for color flow.")
+        return
+
+    # Convert Hex colors to Hue/Sat/Bri
+    hue_a, sat_a, _ = hex_to_hue_sat_bri(color_a)
+    hue_b, sat_b, _ = hex_to_hue_sat_bri(color_b)
+
+    raw_bri = max(1, min(254, int((float(flow_bri) / 100.0) * 254)))
+
+    # Hue transitiontime is in 100ms (1/10th sec) units
+    tt = max(1, int(float(duration_sec) * 10))
+
+    print(f"\n🌈 Starting Two-Color Flow: {len(light_ids)} lights")
+    print(f"Color A: {color_a} ↔ Color B: {color_b} | Duration: {duration_sec}s | Brightness: {flow_bri}% ({raw_bri}/254)")
+
+    # Backup initial light states
+    lights_data = get_lights_v1(bridge_ip, username) or {}
+    initial_states = {}
+    for lid in light_ids:
+        lid_str = str(lid)
+        if lid_str in lights_data:
+            st = lights_data[lid_str].get("state", {})
+            initial_states[lid_str] = {
+                "on": st.get("on", False),
+                "bri": st.get("bri", 254),
+                "hue": st.get("hue"),
+                "sat": st.get("sat"),
+                "ct": st.get("ct"),
+                "xy": st.get("xy"),
+                "colormode": st.get("colormode", "ct")
+            }
+
+    loop_count = 0
+    try:
+        while (loops is None or loop_count < loops):
+            if stop_event and stop_event.is_set():
+                break
+
+            # Phase 1: Smooth transition to Color A
+            payload_a = {"on": True, "hue": hue_a, "sat": sat_a, "bri": raw_bri, "transitiontime": tt}
+            for lid in light_ids:
+                set_light_state_raw(bridge_ip, username, str(lid), payload_a)
+
+            # Dwell/Wait for transition to complete
+            start_wait = time.time()
+            while time.time() - start_wait < float(duration_sec):
+                if stop_event and stop_event.is_set():
+                    break
+                time.sleep(0.1)
+
+            if stop_event and stop_event.is_set():
+                break
+
+            # Phase 2: Smooth transition to Color B
+            payload_b = {"on": True, "hue": hue_b, "sat": sat_b, "bri": raw_bri, "transitiontime": tt}
+            for lid in light_ids:
+                set_light_state_raw(bridge_ip, username, str(lid), payload_b)
+
+            # Dwell/Wait for transition to complete
+            start_wait = time.time()
+            while time.time() - start_wait < float(duration_sec):
+                if stop_event and stop_event.is_set():
+                    break
+                time.sleep(0.1)
+
+            loop_count += 1
+
+    except KeyboardInterrupt:
+        print("\n🛑 Color flow stopped by user.")
+    finally:
+        print("Restoring initial light states...")
+        for lid_str, orig in initial_states.items():
+            final_payload = {"on": orig.get("on", False), "transitiontime": 10}
+            if orig.get("on", False):
+                if orig.get("bri") is not None:
+                    final_payload["bri"] = orig["bri"]
+                colormode = orig.get("colormode", "ct")
+                if colormode == "hs" and orig.get("hue") is not None:
+                    final_payload["hue"] = orig["hue"]
+                    if orig.get("sat") is not None:
+                        final_payload["sat"] = orig["sat"]
+                elif colormode == "ct" and orig.get("ct") is not None:
+                    final_payload["ct"] = orig["ct"]
+
+            set_light_state_raw(bridge_ip, username, lid_str, final_payload)
+        print("✅ Color Flow finished.\n")
+
+
+def start_color_flow_daemon(bridge_ip, username, light_ids, color_a="#ff0000", color_b="#0000ff", duration_sec=2.0, flow_bri=100, loops=10):
+    """Start two-color flow in a background thread."""
+    global COLOR_FLOW_THREAD, COLOR_FLOW_STOP_EVENT
+
+    stop_color_flow_daemon()
+
+    COLOR_FLOW_STOP_EVENT.clear()
+    COLOR_FLOW_THREAD = threading.Thread(
+        target=run_color_flow,
+        args=(bridge_ip, username, light_ids, color_a, color_b, duration_sec, flow_bri, loops, COLOR_FLOW_STOP_EVENT),
+        daemon=True
+    )
+    COLOR_FLOW_THREAD.start()
+    return True
+
+
+def stop_color_flow_daemon():
+    """Stop running background color flow daemon."""
+    global COLOR_FLOW_STOP_EVENT
+    COLOR_FLOW_STOP_EVENT.set()
+    return True
 
 
 def run_light_chaser(bridge_ip, username, light_ids, duration_ms=None, bpm=None, loops=5, flash_color="#ffffff", flash_bri=100, idle_mode="restore", stop_event=None):
@@ -664,11 +781,18 @@ def main():
     parser.add_argument("--sat", type=int, help="Set saturation value (0-254)")
     parser.add_argument("--ct", type=int, help="Set color temperature (154-500 mireds)")
 
+    # Color Flow CLI args
+    parser.add_argument("--color-flow", help="Comma-separated light IDs to run smooth two-color flow (e.g. '1,2')")
+    parser.add_argument("--color-a", default="#ff0000", help="Color A for two-color flow (hex string, default '#ff0000')")
+    parser.add_argument("--color-b", default="#0000ff", help="Color B for two-color flow (hex string, default '#0000ff')")
+    parser.add_argument("--flow-duration", type=float, default=2.0, help="Transition duration in seconds between colors (default: 2.0)")
+    parser.add_argument("--flow-bri", type=int, default=100, help="Flow brightness percentage (1-100%%, default: 100)")
+
     # Chaser CLI args
     parser.add_argument("--chaser", help="Comma-separated light IDs to run sequence chaser (e.g., '1,2,3')")
     parser.add_argument("--duration-ms", type=int, help="Flash duration per light in milliseconds (e.g. 200, 500)")
     parser.add_argument("--bpm", type=int, help="Speed in BPM for light chaser (default: 255 BPM if duration-ms not set)")
-    parser.add_argument("--loops", type=int, default=5, help="Number of chaser loops (default: 5)")
+    parser.add_argument("--loops", type=int, default=5, help="Number of chaser/flow loops (default: 5)")
     parser.add_argument("--flash-color", default="#ffffff", help="Color to flash to (hex string e.g. '#ffffff' or '#ff0000')")
     parser.add_argument("--flash-bri", type=int, default=100, help="Flash brightness percentage (1-100%%, default: 100)")
     parser.add_argument("--idle-mode", choices=["restore", "off"], default="restore", help="State between flashes: 'restore' (original color) or 'off'")
@@ -688,6 +812,15 @@ def main():
     config["bridge_ip"] = bridge_ip
     config["api_key"] = api_key
     save_config(config)
+
+    if args.color_flow:
+        light_ids = [l.strip() for l in args.color_flow.split(",") if l.strip()]
+        run_color_flow(
+            bridge_ip, api_key, light_ids,
+            color_a=args.color_a, color_b=args.color_b,
+            duration_sec=args.flow_duration, flow_bri=args.flow_bri, loops=args.loops
+        )
+        return
 
     if args.chaser:
         light_ids = [l.strip() for l in args.chaser.split(",") if l.strip()]

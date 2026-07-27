@@ -17,6 +17,7 @@
       --accent-yellow: #ffcc00;
       --accent-blue: #0a84ff;
       --accent-cyan: #64d2ff;
+      --accent-purple: #af52de;
       --text-main: #f2f4f8;
       --text-sub: #8e9bb0;
       --glow-red: rgba(255, 59, 48, 0.35);
@@ -166,6 +167,12 @@
       margin-bottom: 2rem;
     }
 
+    .card.flow-panel {
+      background: linear-gradient(135deg, rgba(175, 82, 222, 0.12), rgba(255, 59, 48, 0.06));
+      border-color: rgba(175, 82, 222, 0.35);
+      margin-bottom: 2rem;
+    }
+
     .card.motion-active {
       border-color: rgba(255, 59, 48, 0.6);
       box-shadow: 0 0 30px var(--glow-red);
@@ -240,6 +247,12 @@
       background: rgba(100, 210, 255, 0.15);
       color: #64d2ff;
       border: 1px solid rgba(100, 210, 255, 0.3);
+    }
+
+    .status-indicator.flow-badge {
+      background: rgba(175, 82, 222, 0.2);
+      color: #bf5af2;
+      border: 1px solid rgba(175, 82, 222, 0.4);
     }
 
     @keyframes alert-pulse {
@@ -400,6 +413,23 @@
       border-color: var(--accent-cyan);
     }
 
+    .action-link-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--card-border);
+      color: var(--accent-cyan);
+      padding: 0.25rem 0.6rem;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .action-link-btn:hover {
+      background: rgba(100, 210, 255, 0.2);
+      border-color: var(--accent-cyan);
+    }
+
     .chaser-selector-list {
       display: flex;
       flex-direction: column;
@@ -542,6 +572,11 @@
       box-shadow: 0 4px 14px rgba(100, 210, 255, 0.3);
     }
 
+    .btn-flow {
+      background: linear-gradient(135deg, #af52de, #ff3b30);
+      box-shadow: 0 4px 14px rgba(175, 82, 222, 0.3);
+    }
+
     .btn-stop {
       background: var(--accent-red);
     }
@@ -563,7 +598,7 @@
     <div class="logo-area">
       <div class="logo-icon">⚡</div>
       <div>
-        <h1>Hue Motion, Switch & Light Chaser</h1>
+        <h1>Hue Motion, Switch & Light Controller</h1>
         <div class="subtitle" id="bridge-info">Connected to Philips Hue Bridge</div>
       </div>
     </div>
@@ -586,6 +621,93 @@
     <button class="btn" onclick="triggerPair()">Pair Now</button>
   </div>
 
+  <!-- Smooth Two-Color Flow Panel -->
+  <div class="card flow-panel">
+    <div class="card-header">
+      <div>
+        <div class="sensor-title">🌈 Smooth Two-Color Flow Transition</div>
+        <div class="sensor-model">Smoothly blend lights back and forth between two colors with adjustable flow duration & brightness</div>
+      </div>
+      <div class="status-indicator flow-badge">
+        <span>SMOOTH FLOW</span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+      <span style="font-size: 0.85rem; color: var(--text-sub);">Select Lights for Color Flow:</span>
+      <div style="display: flex; gap: 0.4rem;">
+        <button class="action-link-btn" onclick="selectAllFlowLights(true)">☑️ Select All</button>
+        <button class="action-link-btn" onclick="selectAllFlowLights(false)">⬜ Deselect All</button>
+      </div>
+    </div>
+    <div class="chaser-selector-list" id="flow-light-selector" style="flex-direction: row; flex-wrap: wrap; gap: 0.75rem;">
+      <!-- Populated dynamically -->
+    </div>
+
+    <div class="chaser-options-grid">
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Color A:</span>
+        <div style="display: flex; align-items: center; gap: 0.5rem; height: 38px;">
+          <input type="color" id="flow-color-a" value="#ff3b30" class="color-picker">
+          <div class="color-presets">
+            <div class="color-pill" style="background: #ff3b30;" title="Red" onclick="setFlowColorA('#ff3b30')"></div>
+            <div class="color-pill" style="background: #ff9500;" title="Orange" onclick="setFlowColorA('#ff9500')"></div>
+            <div class="color-pill" style="background: #ffcc00;" title="Yellow" onclick="setFlowColorA('#ffcc00')"></div>
+            <div class="color-pill" style="background: #34c759;" title="Green" onclick="setFlowColorA('#34c759')"></div>
+            <div class="color-pill" style="background: #0a84ff;" title="Blue" onclick="setFlowColorA('#0a84ff')"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Color B:</span>
+        <div style="display: flex; align-items: center; gap: 0.5rem; height: 38px;">
+          <input type="color" id="flow-color-b" value="#0a84ff" class="color-picker">
+          <div class="color-presets">
+            <div class="color-pill" style="background: #0a84ff;" title="Blue" onclick="setFlowColorB('#0a84ff')"></div>
+            <div class="color-pill" style="background: #64d2ff;" title="Cyan" onclick="setFlowColorB('#64d2ff')"></div>
+            <div class="color-pill" style="background: #af52de;" title="Purple" onclick="setFlowColorB('#af52de')"></div>
+            <div class="color-pill" style="background: #ff2d55;" title="Pink" onclick="setFlowColorB('#ff2d55')"></div>
+            <div class="color-pill" style="background: #34c759;" title="Green" onclick="setFlowColorB('#34c759')"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Flow Brightness: <span id="flow-bri-val" style="color: var(--accent-purple); font-weight: 700;">100%</span></span>
+        <div style="display: flex; align-items: center; gap: 0.5rem; height: 38px;">
+          <input type="range" id="flow-bri" min="1" max="100" value="100" class="slider" 
+                 style="accent-color: var(--accent-purple);"
+                 oninput="document.getElementById('flow-bri-val').textContent = this.value + '%'">
+        </div>
+      </div>
+
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Transition Flow Duration:</span>
+        <input type="number" id="flow-duration-sec" value="2.0" step="0.5" min="0.2" max="60.0" class="chaser-input">
+        <div style="display: flex; gap: 0.3rem; margin-top: 0.4rem;">
+          <button class="preset-chip" onclick="setFlowDurationPreset(0.5)">0.5s</button>
+          <button class="preset-chip" onclick="setFlowDurationPreset(1.0)">1.0s</button>
+          <button class="preset-chip" onclick="setFlowDurationPreset(2.0)">2.0s</button>
+          <button class="preset-chip" onclick="setFlowDurationPreset(3.0)">3.0s</button>
+          <button class="preset-chip" onclick="setFlowDurationPreset(5.0)">5.0s</button>
+        </div>
+      </div>
+
+      <div>
+        <span style="font-size: 0.8rem; color: var(--text-sub); display: block; margin-bottom: 0.3rem;">Loops:</span>
+        <input type="number" id="flow-loops" value="10" min="1" max="100" class="chaser-input">
+      </div>
+    </div>
+
+    <div class="chaser-controls">
+      <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+        <button class="btn btn-flow" onclick="startColorFlow()">▶️ Start Smooth Color Flow</button>
+        <button class="btn btn-stop" onclick="stopColorFlow()">⏹️ Stop Flow</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Light Chaser Panel -->
   <div class="card chaser-panel">
     <div class="card-header">
@@ -598,7 +720,13 @@
       </div>
     </div>
 
-    <div style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 0.5rem;">Light Sequence Order (Top to Bottom):</div>
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+      <span style="font-size: 0.85rem; color: var(--text-sub);">Light Sequence Order (Top to Bottom):</span>
+      <div style="display: flex; gap: 0.4rem;">
+        <button class="action-link-btn" onclick="selectAllChaserLights(true)">☑️ Select All</button>
+        <button class="action-link-btn" onclick="selectAllChaserLights(false)">⬜ Deselect All</button>
+      </div>
+    </div>
     <div class="chaser-selector-list" id="chaser-light-selector">
       <!-- Re-orderable list populated dynamically -->
     </div>
@@ -740,12 +868,90 @@
       cachedLights = data.lights || [];
 
       updateChaserOrderList(cachedLights);
+      renderFlowLightSelector(cachedLights);
       renderSensors(data.sensors || []);
       renderSwitches(data.switches || []);
       renderLights(cachedLights);
     } catch(e) {
       console.error('Error fetching status:', e);
     }
+  }
+
+  function selectAllFlowLights(selectState) {
+    const checkboxes = document.querySelectorAll('.flow-checkbox');
+    checkboxes.forEach(cb => (cb.checked = selectState));
+  }
+
+  function selectAllChaserLights(selectState) {
+    orderedChaserLights.forEach(l => (l.checked = selectState));
+    renderChaserSelector();
+  }
+
+  function renderFlowLightSelector(lights) {
+    const container = document.getElementById('flow-light-selector');
+    if (container.children.length === lights.length) return;
+
+    container.innerHTML = lights.map(l => `
+      <label class="chaser-item" style="cursor: pointer;">
+        <input type="checkbox" value="${l.id}" class="flow-checkbox" checked style="accent-color: var(--accent-purple); cursor: pointer;">
+        <span style="font-weight: 600;">💡 ${l.name} <span style="font-size: 0.75rem; color: var(--text-sub);">(ID ${l.id})</span></span>
+      </label>
+    `).join('');
+  }
+
+  function setFlowColorA(colorHex) {
+    document.getElementById('flow-color-a').value = colorHex;
+  }
+
+  function setFlowColorB(colorHex) {
+    document.getElementById('flow-color-b').value = colorHex;
+  }
+
+  function setFlowDurationPreset(sec) {
+    document.getElementById('flow-duration-sec').value = sec;
+  }
+
+  async function startColorFlow() {
+    const checkboxes = document.querySelectorAll('.flow-checkbox:checked');
+    const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+
+    if (selectedIds.length === 0) {
+      alert('Please select at least 1 light for Color Flow.');
+      return;
+    }
+
+    const colorA = document.getElementById('flow-color-a').value || '#ff3b30';
+    const colorB = document.getElementById('flow-color-b').value || '#0a84ff';
+    const durationSec = parseFloat(document.getElementById('flow-duration-sec').value) || 2.0;
+    const flowBri = parseInt(document.getElementById('flow-bri').value) || 100;
+    const loops = parseInt(document.getElementById('flow-loops').value) || 10;
+
+    try {
+      const res = await fetch('/api/color_flow/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          light_ids: selectedIds,
+          color_a: colorA,
+          color_b: colorB,
+          duration_sec: durationSec,
+          flow_bri: flowBri,
+          loops: loops
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        console.log('Color Flow started:', data.message);
+      }
+    } catch(e) {
+      alert('Error starting Color Flow: ' + e);
+    }
+  }
+
+  async function stopColorFlow() {
+    try {
+      await fetch('/api/color_flow/stop', { method: 'POST' });
+    } catch(e) {}
   }
 
   function updateChaserOrderList(lights) {
